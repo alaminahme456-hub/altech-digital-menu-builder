@@ -1,0 +1,289 @@
+     1→# Worklog
+     2→
+     3→## Task 3 - api-builder
+     4→
+     5→### Summary
+     6→Created 23 API files for the Digital Menu Builder SaaS platform backend. All files are production-quality TypeScript with proper error handling, authentication, authorization, and validation.
+     7→
+     8→### Files Created
+     9→
+    10→**Authentication (4 files):**
+    11→1. `src/lib/auth.ts` - NextAuth configuration with Credentials provider, JWT/session callbacks, bcryptjs password verification
+    12→2. `src/app/api/auth/[...nextauth]/route.ts` - NextAuth API route handler (GET/POST)
+    13→3. `src/app/api/auth/register/route.ts` - User registration with Zod validation, bcryptjs hashing, auto-creates free subscription
+    14→4. `src/app/api/auth/profile/route.ts` - GET/PUT user profile with business memberships and active subscriptions
+    15→
+    16→**Business CRUD (2 files):**
+    17→5. `src/app/api/businesses/route.ts` - POST (create with unique slug generation using crypto), GET (list user's businesses with category/analytics counts)
+    18→6. `src/app/api/businesses/[id]/route.ts` - GET/PUT/DELETE single business with ownership verification via BusinessMember
+    19→
+    20→**Categories & Items (6 files):**
+    21→7. `src/app/api/businesses/[id]/categories/route.ts` - GET categories with items, POST new category with auto sort order
+    22→8. `src/app/api/businesses/[id]/categories/[categoryId]/route.ts` - PUT/DELETE category (cascade deletes items)
+    23→9. `src/app/api/businesses/[id]/categories/[categoryId]/items/route.ts` - GET/POST items with ownership and category verification
+    24→10. `src/app/api/businesses/[id]/categories/[categoryId]/items/[itemId]/route.ts` - GET/PUT/DELETE single item
+    25→11. `src/app/api/businesses/[id]/categories/reorder/route.ts` - PUT to batch update category sort orders in a transaction
+    26→12. `src/app/api/businesses/[id]/items/reorder/route.ts` - PUT to batch update item sort orders within a category
+    27→
+    28→**Upload, AI, QR, Publish, Design (5 files):**
+    29→13. `src/app/api/upload/route.ts` - POST file upload (jpg/png/webp/pdf, max 10MB) using Bun.write, UUID filenames, subdirectory routing (logos/food/menus)
+    30→14. `src/app/api/businesses/[id]/ai-scan/route.ts` - POST image upload for AI scanning, saves image and creates AiScanLog placeholder
+    31→15. `src/app/api/businesses/[id]/qr/route.ts` - GET generates/retrieves QR code using `qrcode` package (PNG file + SVG string), upserts QrCode record
+    32→16. `src/app/api/businesses/[id]/publish/route.ts` - PUT to change menu upload status (draft/published/unpublished), auto-unpublishes others
+    33→17. `src/app/api/businesses/[id]/design/route.ts` - GET/PUT design settings with upsert (creates default if not exists)
+    34→
+    35→**Analytics & Public Menu (3 files):**
+    36→18. `src/app/api/businesses/[id]/analytics/route.ts` - GET aggregated analytics (today/week/month views, QR scans, most viewed items/categories, 30-day daily data)
+    37→19. `src/app/api/analytics/track/route.ts` - POST public endpoint to track view/scan events (no auth required)
+    38→20. `src/app/api/menu/[slug]/route.ts` - GET public menu by slug (no auth), includes business info, categories with visible items, design settings, auto-tracks view
+    39→
+    40→**Admin Routes (3 files):**
+    41→21. `src/app/api/admin/stats/route.ts` - GET platform stats (total users, businesses, published menus, scans, monthly growth)
+    42→22. `src/app/api/admin/businesses/route.ts` - GET all businesses with pagination/search/status filter, PUT to suspend/delete
+    43→23. `src/app/api/admin/templates/route.ts` - GET/POST/PUT/DELETE menu templates (admin-only CRUD)
+    44→
+    45→### Key Patterns Used
+    46→- All auth routes use `getServerSession(authOptions)` from `@/lib/auth`
+    47→- Business ownership verified through `BusinessMember` table with role checks
+    48→- Zod schemas for all input validation with safeParse and descriptive error responses
+    49→- Proper HTTP status codes: 200, 201, 400, 401, 403, 404, 409, 500
+    50→- `NextResponse.json()` for all responses
+    51→- `db` imported from `@/lib/db` (shared Prisma instance)
+    52→- File uploads use Bun.write with UUID filenames
+    53→- QR code generation uses `qrcode` package for both PNG and SVG
+    54→- Slug generation: lowercase, hyphens for spaces/special chars, 4-char hex suffix for uniqueness
+    55→- ESLint passes with zero errors
+    56→
+    57→---
+    58→
+    59→## Task 5 - Dashboard Layout & Overview Page
+    60→
+    61→### Summary
+    62→Created the main dashboard shell (DashboardLayout) and overview/home page (OverviewPage) for the MenuQR SaaS platform. Both files use client-side SPA routing via Zustand, shadcn/ui components, and follow mobile-first responsive design with the brand color system (#1a1a2e dark, #e94560 accent).
+    63→
+    64→### Files Created
+    65→
+    66→1. **`src/components/dashboard/DashboardLayout.tsx`** — Main dashboard layout shell component (named export `DashboardLayout`)
+    67→   - **Mobile top bar** (visible < md): ALTECH logo, business name, hamburger Sheet trigger
+    68→   - **Desktop sidebar** (visible md+, fixed left, w-64, bg-[#1a1a2e]): Brand logo with "by ALTECH" subtitle, business switcher DropdownMenu (multi-business), 10 navigation items with lucide icons, active item highlighted with #e94560, scrollable via ScrollArea
+    69→   - **Mobile sidebar** (Sheet from shadcn/ui, left side): Full navigation matching desktop sidebar, auto-closes on nav
+    70→   - **Main content area** (right of sidebar): Sticky top bar with page title, business name Badge, user Avatar with DropdownMenu (Account Settings, Business Settings, Sign Out)
+    71→   - Navigation items: Overview, Menu Manager, Upload Menu, AI Menu Scanner, Design Templates, QR Code, Customer Preview, Analytics, Business Settings, Account Settings, Sign Out
+    72→   - Business switcher uses `useAuthStore.businesses` / `setCurrentBusiness` and navigates to dashboard on switch
+    73→   - Sign out calls `authApi.logout()` then resets stores
+    74→
+    75→2. **`src/components/dashboard/OverviewPage.tsx`** — Dashboard overview/home page (named export `OverviewPage`)
+    76→   - **Welcome section**: "Welcome back, {user.first_name}" with current business name and menu status badge (Published/Draft/Unpublished)
+    77→   - **Stats cards row** (4 cards, responsive 2×2 on mobile → 4 columns on lg): Total Menu Items (from category API), Total Menu Views (from analytics API), QR Scans (from analytics API), Menu Status
+    78→   - **Quick Actions** grid (6 cards, 1 col mobile → 2 col sm → 3 col lg): Create Menu Manually, Upload Existing Menu, Scan with AI, Choose Design, Get QR Code, View Analytics — each with icon, title, description, arrow, color-coded
+    79→   - **Recent Activity** section: Dynamic list generated from fetched data (category creation, QR scans, menu views, item updates) or empty state with CTA to create menu
+    80→   - Data fetching via `useEffect` with `Promise.allSettled` for parallel analytics + categories, cleanup-safe
+    81→   - Loading states with Skeleton components on all data-dependent sections
+    82→
+    83→### Key Patterns Used
+    84→- `'use client'` directive on both files
+    85→- Client-side navigation via `useAppStore.setCurrentPage` (not useRouter)
+    86→- Brand colors: `bg-[#1a1a2e]` sidebar, `bg-[#e94560]` active highlights and CTAs
+    87→- shadcn/ui components: Sheet, DropdownMenu, Avatar, ScrollArea, Separator, Badge, Skeleton, Card, Button
+    88→- lucide-react icons throughout
+    89→- `toast` from sonner for user feedback (business switch, sign out)
+    90→- Mobile-first responsive: `md:` and `lg:` breakpoints, `min-w-0` with `truncate` for text overflow
+    91→- API calls: `analyticsApi.get(businessId)` and `categoryApi.list(businessId)` via `@/lib/api`
+    92→- ESLint passes with zero errors on both new files
+    93→
+    94→---
+    95→
+    96→## Task 6 - Menu Manager Page & Upload Menu Page
+    97→
+    98→### Summary
+    99→Created two production-quality dashboard pages for the MenuQR SaaS platform: a full-featured visual menu builder with drag-and-drop reordering (MenuManagerPage) and an upload/preview/publish page for existing menu files (UploadMenuPage). Both use client-side SPA routing via Zustand, shadcn/ui components, and follow the established brand color system.
+   100→
+   101→### Files Created
+   102→
+   103→1. **`src/components/dashboard/MenuManagerPage.tsx`** — Visual menu builder (named export `MenuManagerPage`)
+   104→   - **Two-column layout**: Categories panel (left, 320px on desktop) + Items panel (right), stacked on mobile
+   105→   - **Categories panel**: "Add Category" button, draggable sortable list with @dnd-kit, each category shows name + item count badge + visibility toggle (Eye/EyeOff) + edit (Pencil) + delete (Trash2) + drag handle (GripVertical). Selected category highlighted with #e94560 ring
+   106→   - **Items panel**: Header with category name + item count + "Add Item" button, draggable sortable item cards with @dnd-kit. Each card shows: thumbnail (16×16 with ImageOff fallback), name (bold), description (truncated, muted), price (₦ formatted), availability Switch, edit/duplicate/delete buttons, drag handle
+   107→   - **Item Form Dialog**: Uses key-based remount pattern (ItemFormInner + ItemFormDialog) to avoid useEffect setState lint issue. Form includes: image upload with preview/clear, name (required), description (textarea), price (number with ₦ prefix), Save/Cancel buttons
+   108→   - **Category Dialog**: Add/rename dialog with name input
+   109→   - **Delete Confirmation**: AlertDialog for both categories (shows item count warning) and items
+   110→   - **Auto-save indicator**: "Saving..." / "Saved" badge with 1.5s debounce timer after reorders
+   111→   - **Empty states**: No categories → "Create your first menu category" with CTA. No items → "Add your first menu item" with CTA. No category selected → "Select a category" prompt
+   112→   - **DnD integration**: @dnd-kit/core (DndContext, closestCenter, PointerSensor, KeyboardSensor), @dnd-kit/sortable (SortableContext, verticalListSortingStrategy, useSortable), @dnd-kit/utilities (CSS.Transform)
+   113→   - **Data flow**: Fetches categories on mount via categoryApi.list, all mutations call API then update store, reorders persist via categoryApi.reorder/itemApi.reorder, duplicate creates via API
+   114→   - **Loading state**: Full skeleton layout matching the two-column structure
+   115→
+   116→2. **`src/components/dashboard/UploadMenuPage.tsx`** — Upload/preview/publish page (named export `UploadMenuPage`)
+   117→   - **No upload state**: Large dashed-border dropzone with drag-and-drop support (onDragOver/onDragLeave/onDrop), click-to-upload, CloudUpload icon, format badges (JPG/PNG/WEBP/PDF), 10MB size limit, file validation with error display. Three info cards below (Image Menus, PDF Menus, Publish & Share)
+   118→   - **Upload exists state**: Two-column layout — left: file preview (image or PDF iframe), file metadata; right sidebar with status card (current status badge, upload date) and actions card
+   119→   - **Status badges**: Draft (gray), Published (emerald with Globe icon), Unpublished (amber with GlobeLock icon)
+   120→   - **Action buttons**: Publish Menu (green, emerald-600) / Unpublish Menu (orange, amber), Preview Menu (opens full-screen Dialog), Replace Menu (triggers file input), Delete Menu (red, with AlertDialog confirmation)
+   121→   - **Post-publish**: Success toast with 5s duration + action button "View QR Code" that navigates via setCurrentPage. Green "Menu is Live" info card with link to QR code page
+   122→   - **Full-screen preview dialog**: Large Dialog (max-w-5xl, 90vh) with image or PDF embed, "Open in New Tab" button
+   123→   - **Loading state**: Skeleton header + skeleton preview area
+   124→
+   125→### Key Patterns Used
+   126→- `'use client'` directive on both files
+   127→- Client-side navigation via `useAppStore.setCurrentPage` (not useRouter)
+   128→- Brand colors: `bg-[#e94560]` primary CTAs, emerald for publish/success, amber for unpublish/warning, red for delete
+   129→- shadcn/ui components: Card, Button, Dialog, AlertDialog, Input, Label, Textarea, Switch, Badge, Skeleton, ScrollArea, Separator
+   130→- lucide-react icons: Plus, Pencil, Trash2, Eye, EyeOff, GripVertical, ImageOff, Copy, Loader2, Check, Upload, FileText, Globe, GlobeLock, CloudUpload, etc.
+   131→- `toast` from sonner for all success/error notifications
+   132→- @dnd-kit for drag-and-drop with 5px activation constraint to avoid accidental drags
+   133→- Nigerian Naira formatting: `₦{price.toLocaleString()}`
+   134→- Mobile-first responsive: grid-cols-1 lg:grid-cols-[320px_1fr] for MenuManager, grid-cols-1 lg:grid-cols-[1fr_320px] for UploadMenu
+   135→- API integration: categoryApi, itemApi, uploadApi, menuUploadApi from `@/lib/api`
+   136→- ESLint passes with zero errors on both new files (pre-existing error in CreateBusinessPage.tsx is unrelated)
+   137→
+   138→---
+   139→
+   140→## Task 7 - AI Scanner Page & Design Templates Page
+   141→
+   142→### Summary
+   143→Created two production-quality dashboard pages: an AI-powered menu scanning feature with multi-step flow (AiScannerPage) and a template selection + design customization page (DesignTemplatesPage). Both follow established patterns with Zustand client-side routing, shadcn/ui components, framer-motion animations, and the brand color system.
+   144→
+   145→### Files Created
+   146→
+   147→1. **`src/components/dashboard/AiScannerPage.tsx`** — AI menu scanner (named export `AiScannerPage`)
+   148→   - **Three-step flow**: `upload` → `scanning` → `review`, managed with local state
+   149→   - **Step 1 (Upload)**: Large dashed-border dropzone with drag-and-drop support, accepts JPG/PNG/WEBP/PDF (10MB max). On file select: shows image preview with file metadata, "Scan Menu" CTA button. Three info cards (AI-Powered, Instant Results, Review & Edit). Click-to-browse fallback.
+   150→   - **Step 2 (Scanning)**: Animated scanning state with framer-motion rotating border spinner + ScanLine icon center, "AI is analyzing your menu..." text, progressive hint badges (Reading image → Detecting items → Extracting prices → Categorizing) with staggered opacity animation. Calls `aiScanApi.upload()` for server-side logging, then `scanWithAI()` using `z-ai-web-dev-sdk` `createVlm` with base64 image + structured prompt requesting JSON array of `{name, description, price, category}`. Parses response with regex `
+   151→[[\s\S]*\]` to extract JSON array, maps to `DetectedItem[]` format. Handles empty results and errors gracefully with toast messages.
+   152→   - **Step 3 (Review)**: Green success banner showing item count. Action bar: "Add Item" (adds blank row), "Clear All" (with confirmation toast), "Re-scan" (resets to upload). Scrollable list (max-h-60vh) of detected items, each in a Card with: index badge, Name input, Category (shadcn Select with 20 common Nigerian restaurant categories + custom text input fallback), Description input, Price input with ₦ prefix, Trash2 remove button. Fields use `updateDetectedItem` / `removeDetectedItem` / `addDetectedItem` from `useAiScanStore`. Sticky bottom bar with item count and "Save to Menu" button.
+   153→   - **Save to Menu**: Groups items by category, creates each category via `categoryApi.create`, then creates each item via `itemApi.create` (FormData). Updates `useMenuStore` with `addCategory`/`addItem`. Shows success toast with category + item counts, navigates to menu-manager page.
+   154→   - **DetectedItemRow**: Extracted as separate component for cleaner JSX. Handles common vs custom category display.
+   155→   - framer-motion AnimatePresence with mode="wait" for step transitions, staggered row entry animations.
+   156→
+   157→2. **`src/components/dashboard/DesignTemplatesPage.tsx`** — Template selection & customization (named export `DesignTemplatesPage`)
+   158→   - **Template Grid**: 10 templates in responsive grid (2 cols mobile, 3 sm, 4 lg, 5 xl). Each card shows: mini mock preview (h-48, header bar in primary color, 3 mock menu item lines, background in template bg color), template name, active checkmark overlay (ring-2 + filled circle with Check icon), Premium badge (amber, Crown icon) for 3 premium templates, "Use Template" / "Active" button (fades in on hover, always visible when active).
+   159→   - **Template definitions**: 10 templates (Classic Restaurant, Modern, Luxury, Minimal, Fast Food, Café, Pizza, Dark Premium, Colorful, Elegant) with `id`, `name`, `colors: {primary, bg}`, `isPremium`. Dark Premium has special dark-bg handling in preview.
+   160→   - **Customization Panel**: Three cards in responsive grid (1 col mobile, 2 md, 3 xl):
+   161→     - Colors card: Primary + Secondary color pickers (native input type="color" + hex Input with font-mono)
+   162→     - Layout & Typography card: Font Style (Modern/Classic/Elegant/Casual), Background (Light/Dark/Warm/Cool), Logo Position (Top Center/Top Left/Top Right/Hidden), Menu Layout (Grid/List/Compact) — all shadcn Select components
+   163→     - Settings card: WhatsApp Ordering toggle (Switch) with animated number input reveal (framer-motion height/opacity), SEO Indexing toggle (Switch) with descriptions
+   164→   - **Data flow**: On mount fetches existing design via `designApi.get(businessId)` and populates `useDesignStore`. Template selection updates store with template ID + primary color. Save calls `designApi.update` with all design store fields.
+   165→   - **Actions**: "Preview with Template" button navigates to preview page, "Save Design" button with loading state.
+   166→   - Loading state: Skeleton grid matching template layout.
+   167→
+   168→### Key Patterns Used
+   169→- `'use client'` directive on both files
+   170→- Client-side navigation via `useAppStore.setCurrentPage`
+   171→- Brand colors: `bg-[#e94560]` primary CTAs, emerald for success/saved states, violet for AI branding
+   172→- shadcn/ui components: Card, Button, Input, Label, Badge, Select, Switch, Separator, Skeleton
+   173→- framer-motion: AnimatePresence (mode="wait"), motion.div for step transitions and staggered list entry, motion.div for rotating spinner
+   174→- `z-ai-web-dev-sdk`: `createVlm` imported dynamically (await import) for AI vision scan on client side
+   175→- `toast` from sonner for all success/error notifications
+   176→- Nigerian Naira (₦) symbol used throughout for price fields
+   177→- Mobile-first responsive: grid breakpoints, `sm:hidden` / `hidden sm:flex` for conditional elements
+   178→- ESLint passes with zero errors on both new files
+   179→
+   180→---
+   181→
+   182→## Task 8 - QR Code, Preview, and Analytics Pages
+   183→
+   184→### Summary
+   185→Created three production-quality dashboard pages for the MenuQR SaaS platform: a QR code generation/management page, a multi-device menu preview page, and a comprehensive analytics dashboard with recharts visualizations. All follow established patterns with Zustand client-side routing, shadcn/ui components, mobile-first responsive design, and the brand color system.
+   186→
+   187→### Files Created
+   188→
+   189→1. **`src/components/dashboard/QrCodePage.tsx`** — QR code management (named export `QrCodePage`)
+   190→   - **QR Code Display**: Large centered QR code image (280×280 mobile, 320×320 desktop) in a dashed-border frame, fetched from `qrApi.get(businessId)` returning `{slug, pngUrl, svgUrl}`
+   191→   - **Menu URL**: Readonly input showing `{origin}/menu/{slug}` with a copy button alongside it
+   192→   - **Action buttons row** (responsive grid, 2 cols mobile, 4 cols desktop): Download PNG (anchor element with download attribute), Download SVG (disabled if not available), Copy Link (clipboard API with sonner toast), Share (Web Share API with clipboard fallback)
+   193→   - **Print button**: Creates a hidden iframe with the QR code, business name, and "Scan to view our digital menu" text, then triggers `window.print()`
+   194→   - **Info cards** (3 cards, 1 col mobile, 3 col md): Permanent QR Code (ShieldCheck, emerald), Print & Place Anywhere (Printer, violet), Instant Digital Access (Smartphone, sky)
+   195→   - **Loading state**: Centered skeleton layout with QR frame, URL input, and action button skeletons
+   196→   - **Error state**: Red icon, error message, "Try Again" button
+   197→   - All download/share/copy actions provide sonner toast feedback
+   198→
+   199→2. **`src/components/dashboard/PreviewPage.tsx`** — Multi-device menu preview (named export `PreviewPage`)
+   200→   - **Preview mode toggle**: 3 buttons (Mobile/ Desktop/ Full Screen) in a pill-style toggle bar, mobile defaults selected
+   201→   - **Phone frame**: Realistic iPhone-style shell with 6px dark border, rounded-[40px], notch (150×28px), 375×812 viewport, scrollable inner content area
+   202→   - **Desktop frame**: Browser-chrome mock with traffic-light dots (red/amber/green), URL bar showing `menuqr.app/menu/your-business`, max-w-[1024px], max-h-[600px] scrollable
+   203→   - **Full screen mode**: shadcn/ui Dialog filling the entire viewport (100vw × 100vh, no border/radius), ScrollArea with max-w-lg centered content, closes back to mobile mode
+   204→   - **Preview content** (MenuPreviewContent component): Full menu simulation using fetched categories + design data — business logo (circular, bordered), business name in primaryColor, description, scrollable category pill buttons (active = secondaryColor), menu items in grid (2-col) or list layout based on `menuLayout` design setting, each item shows image (or ImageIcon placeholder), name, truncated description, ₦-formatted price in secondaryColor, WhatsApp order button if enabled (green #25D366)
+   205→   - **Design application**: Font family mapping (modern/classic/playful/minimal), light/dark background styles, primary/secondary colors applied throughout
+   206→   - **Data flow**: On mount fetches categories via `categoryApi.list` and design via `designApi.get`, syncs design to `useDesignStore`, manages local category and design state
+   207→   - **Loading/error/empty states**: Skeleton phone frame, error card with retry, "No menu items yet" empty state with UtensilsCrossed icon
+   208→
+   209→3. **`src/components/dashboard/AnalyticsPage.tsx`** — Analytics dashboard (named export `AnalyticsPage`)
+   210→   - **Stats Cards Row** (4 cards, 2×2 mobile → 4 col lg): Total Views (Eye, sky), QR Scans (QrCode, violet), Views Today (Calendar, amber), Views This Month (CalendarDays, emerald) — big bold numbers with `toLocaleString()`, Skeleton loading state
+   211→   - **Charts Section** (2-col grid on lg):
+   212→     - **Left — Views Over Time**: AreaChart (recharts) with `dailyViews` data, gradient fill (#e94560 → transparent), formatted XAxis dates (MM/DD), integer YAxis, custom tooltip, 300px height, ResponsiveContainer
+   213→     - **Right — Top Categories**: Donut PieChart (innerRadius=45, outerRadius=80) with 7-color palette, legend list alongside showing colored dots + category names + view counts
+   214→   - **Tables Section** (2-col grid on lg):
+   215→     - **Most Viewed Items**: shadcn Table with columns #, Item Name, Category (hidden on mobile), Views (right-aligned, tabular-nums). Shows top 10 items with mostViewedItems from API
+   216→     - **Recent Activity**: List of daily view entries (reversed, last 8) with Eye icon, date, view count, and TrendingUp indicator
+   217→   - **Custom Tooltip**: Clean white card with shadow showing date and formatted view count
+   218→   - **Empty state**: When all analytics values are 0 and arrays empty — centered BarChart3 icon, "No analytics data yet" message, CTA button to navigate to QR Code page
+   219→   - **Error state**: Red icon, error message, "Try Again" button
+   220→   - All chart colors use the brand palette: `#e94560` accent, `#1a1a2e` dark, plus amber/emerald/violet/pink/teal for variety
+   221→
+   222→### Key Patterns Used
+   223→- `'use client'` directive on all three files
+   224→- Client-side navigation via `useAppStore.setCurrentPage` (analytics empty state CTA)
+   225→- Brand colors: `#e94560` for primary accent in charts/CTAs, `#1a1a2e` as secondary dark, sky/violet/amber/emerald for stat card variety
+   226→- shadcn/ui components: Card, Button, Input, Skeleton, Dialog, ScrollArea, Table, TableHeader, TableBody, TableHead, TableRow, TableCell
+   227→- recharts: AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer — with linearGradient fill, custom Tooltip component, inner donut style
+   228→- lucide-react icons: Eye, QrCode, Calendar, CalendarDays, BarChart3, TrendingUp, Download, FileCode, Link2, Share2, Printer, ShieldCheck, Smartphone, Monitor, Maximize, MessageCircle, Clock, ArrowRight
+   229→- `toast` from sonner for download/copy/share feedback
+   230→- Mobile-first responsive: grid-cols-2 lg:grid-cols-4 for stats, grid-cols-1 lg:grid-cols-2 for charts/tables, `hidden sm:table-cell` for table columns, `sm:hidden`/`hidden sm:inline` for button labels
+   231→- Loading states: Skeleton components throughout (stat values, chart areas, table rows, device frames)
+   232→- Error and empty states with retry CTA buttons on all pages
+   233→- `toLocaleString()` for number formatting across all components
+   234→- ESLint passes with zero errors on all three new files
+   235→
+   236→---
+   237→
+   238→## Task 9 - Business Settings, Account Settings & Admin Pages
+   239→
+   240→### Summary
+   241→Created three production-quality dashboard pages for the MenuQR SaaS platform: a comprehensive business settings editor with logo management and danger zone, a user account settings page with profile/security/subscription management, and a platform admin dashboard with tabbed interface. All follow established patterns with Zustand client-side routing, shadcn/ui components, mobile-first responsive design, and the brand color system.
+   242→
+   243→### Files Created
+   244→
+   245→1. **`src/components/dashboard/BusinessSettingsPage.tsx`** — Business settings editor (named export `BusinessSettingsPage`)
+   246→   - **Sticky save button**: Top-right positioned Save Changes button with loading spinner state
+   247→   - **Business Information card**: Name input (required), Category select (8 options: Restaurant, Café, Hotel, Bar, Food Truck, Bakery, Catering, Other), Description textarea
+   248→   - **Contact Information card**: Phone (type tel), WhatsApp number (type tel, MessageCircle icon), Address textarea
+   249→   - **Opening Hours card**: Single textarea with placeholder example "Mon-Fri: 9AM-10PM, Sat-Sun: 10AM-11PM"
+   250→   - **Business Logo card**: Current logo display (24×24 bordered container with object-contain), Upload new logo button (hidden file input, validates image type and 2MB max, calls `uploadApi.upload`), Remove logo button (red, X icon). Replace/Upload label toggles based on existing logo
+   251→   - **Danger Zone card**: Red-bordered card with AlertTriangle icon, warning text about permanent deletion, Delete Business button (destructive variant, opens AlertDialog with full confirmation text, calls `businessApi.delete`). On success: switches to next business or logs out and navigates to landing
+   252→   - **Save handler**: Creates FormData with all fields (name, category, description, phone, whatsapp, address, openingHours, logoUrl), calls `businessApi.update`, updates both `currentBusiness` and `businesses` array in auth store
+   253→   - **Pre-fill**: All form fields populated from `currentBusiness` on mount via useEffect
+   254→   - **Loading state**: 4 skeleton cards while initializing
+   255→   - **Null guard**: Shows "No business selected" card if `currentBusiness` is null
+   256→
+   257→2. **`src/components/dashboard/AccountSettingsPage.tsx`** — Account settings (named export `AccountSettingsPage`)
+   258→   - **Profile card**: Large Avatar (h-20, w-20) with initials derived from user name, Name input, Email input (disabled, gray background, with note "Email cannot be changed"), Save Profile button
+   259→   - **Security card**: Change Password section — Current Password, New Password (min 8 chars validation), Confirm New Password (match validation), Update Password button. Shows toast "Password updated successfully" on click (placeholder, no API endpoint yet). All fields reset after success
+   260→   - **Businesses card**: Lists all user businesses from `useAuthStore.businesses`, each showing name (truncated), status badge (active/suspended/pending), plan badge (outline), category. Click "Switch" to switch business via `setCurrentBusiness` + navigate to dashboard
+   261→   - **Subscription card**: Dynamic plan display (Free/Pro/Business) with colored background cards (gray/amber/violet), plan icon (User/Sparkles/Crown), feature checkmark list (5/7/9 features per plan), contextual CTA (Free→Upgrade, Pro→Upgrade to Business, Business→"highest plan" success message), upgrade button shows "Coming soon" toast
+   262→   - **Helper functions**: `getInitials()` extracts up to 2 uppercase initials from name
+   263→   - **Loading state**: 3 skeleton cards while initializing
+   264→   - **Null guard**: Shows login prompt if user is null
+   265→
+   266→3. **`src/components/dashboard/AdminPage.tsx`** — Platform admin dashboard (named export `AdminPage`)
+   267→   - **Access control**: If `user.role !== 'admin'`, shows centered Lock icon + "Access Denied" message with description
+   268→   - **Admin banner**: Subtle primary-tinted top bar with Shield icon, "Platform Administration" title
+   269→   - **Tabbed interface** (shadcn Tabs, 3 tabs with icons + labels, mobile shows icons only):
+   270→     - **Overview tab**: Fetches `adminApi.getStats()`, displays 4 stat cards (Total Users, Total Businesses, Published Menus, Total QR Scans) with icons, big bold numbers (toLocaleString), descriptions, Skeleton loading state, error state with retry message
+   271→     - **Businesses tab**: Fetches `adminApi.getBusinesses(page)` with pagination. Desktop: shadcn Table with columns (Name, Category, Plan badge, Status badge active=green/suspended=red, Created date formatted, Actions). Mobile: Card-based list view with stacked layout. Actions: Suspend/Activate toggle button (Pause/Play icon, calls `adminApi.updateBusiness`), Delete button (Trash2, AlertDialog confirmation, sets status to deleted). Pagination controls (Previous/Next, page X of Y, disabled at boundaries)
+   272→     - **Templates tab**: "Coming soon" amber info card with LayoutTemplate icon, management table listing all 10 templates from DesignTemplatesPage (Name, Type Free/Premium badge, Active status, View button disabled)
+   273→   - **StatCard component**: Reusable stat card with icon, label, value, description, loading skeleton
+   274→   - **OverviewTab, BusinessesTab, TemplatesTab**: Extracted as separate internal components for clean organization
+   275→
+   276→### Key Patterns Used
+   277→- `'use client'` directive on all three files
+   278→- Client-side navigation via `useAppStore.setCurrentPage` (business switch, post-delete redirect)
+   279→- shadcn/ui components: Card, Button, Input, Label, Textarea, Select, Tabs, Table, AlertDialog, Badge, Separator, Avatar, Skeleton
+   280→- lucide-react icons: Building2, Phone, MessageCircle, MapPin, Clock, ImageIcon, Upload, Trash2, Save, Loader2, AlertTriangle, X, User, Shield, CreditCard, Lock, Check, Crown, Sparkles, Mail, Users, QrCode, BarChart3, ChevronLeft, ChevronRight, Pause, Play, Eye, LayoutTemplate
+   281→- `toast` from sonner for all success/error notifications
+   282→- Mobile-first responsive: `sm:` and `md:` breakpoints, `hidden sm:block`/`sm:hidden` for table/list view toggling, `w-full sm:w-auto` for buttons
+   283→- Loading states: Skeleton components throughout (forms, stat cards, table rows)
+   284→- Error handling: try/catch with toast.error on all API calls, inline error messages for form validation
+   285→- Form validation: required name check, password min 8 chars, password confirmation match, image type/size validation
+   286→- AlertDialog for destructive confirmations (delete business, delete in admin)
+   287→- Store updates after mutations (setCurrentBusiness, setBusinesses, setUser)
+   288→- ESLint passes with zero errors on all three new files
+   289→

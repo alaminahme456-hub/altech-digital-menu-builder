@@ -1,0 +1,176 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  name          String?
+  passwordHash  String
+  role          String    @default("user") // user, admin
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  businesses    BusinessMember[]
+  subscriptions Subscription[]
+  platformAdmin PlatformAdmin?
+}
+
+model PlatformAdmin {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  user      User     @relation(fields: [userId], references: [id])
+  role      String   @default("admin")
+  createdAt DateTime @default(now())
+}
+
+model Business {
+  id          String   @id @default(cuid())
+  name        String
+  slug        String   @unique
+  category    String   @default("restaurant")
+  logoUrl     String?
+  phone       String?
+  whatsapp    String?
+  address     String?
+  description String?
+  openingHours String? // JSON string
+  status      String   @default("active") // active, suspended, deleted
+  plan        String   @default("free") // free, pro, business
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  members     BusinessMember[]
+  menuCategories MenuCategory[]
+  menuUploads MenuUpload[]
+  qrCode     QrCode?
+  analytics  Analytics[]
+  designSettings DesignSetting?
+}
+
+model BusinessMember {
+  id         String   @id @default(cuid())
+  userId     String
+  businessId String
+  role       String   @default("owner") // owner, manager, staff
+  joinedAt   DateTime @default(now())
+  user       User     @relation(fields: [userId], references: [id])
+  business   Business @relation(fields: [businessId], references: [id])
+
+  @@unique([userId, businessId])
+}
+
+model MenuCategory {
+  id         String     @id @default(cuid())
+  name       String
+  businessId String
+  sortOrder  Int        @default(0)
+  isHidden   Boolean    @default(false)
+  business   Business   @relation(fields: [businessId], references: [id])
+  items      MenuItem[]
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+}
+
+model MenuItem {
+  id          String       @id @default(cuid())
+  name        String
+  description String?
+  price       Float
+  imageUrl    String?
+  categoryId  String
+  sortOrder   Int          @default(0)
+  isAvailable Boolean      @default(true)
+  isHidden    Boolean      @default(false)
+  category    MenuCategory @relation(fields: [categoryId], references: [id])
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+}
+
+model MenuUpload {
+  id         String   @id @default(cuid())
+  businessId String
+  fileUrl    String
+  fileType   String   // jpg, png, webp, pdf
+  fileSize   Int
+  status     String   @default("draft") // draft, published, unpublished
+  business   Business @relation(fields: [businessId], references: [id])
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+model MenuTemplate {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  thumbnailUrl String?
+  config      String   // JSON string with template config
+  isPremium   Boolean  @default(false)
+  isActive    Boolean  @default(true)
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+}
+
+model QrCode {
+  id         String   @id @default(cuid())
+  businessId String   @unique
+  slug       String   @unique
+  pngUrl     String?
+  svgUrl     String?
+  business   Business @relation(fields: [businessId], references: [id])
+  createdAt  DateTime @default(now())
+}
+
+model DesignSetting {
+  id              String   @id @default(cuid())
+  businessId      String   @unique
+  templateId      String?
+  primaryColor    String   @default("#000000")
+  secondaryColor  String   @default("#ffffff")
+  fontStyle       String   @default("modern")
+  backgroundStyle String   @default("light")
+  logoPosition    String   @default("top-center")
+  menuLayout      String   @default("grid")
+  whatsappEnabled Boolean  @default(false)
+  whatsappNumber  String?
+  seoEnabled     Boolean  @default(true)
+  business        Business @relation(fields: [businessId], references: [id])
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model Analytics {
+  id         String   @id @default(cuid())
+  businessId String
+  eventType  String   // view, qr_scan, item_view, category_view
+  itemId     String?
+  categoryId String?
+  referrer   String?
+  userAgent  String?
+  ipAddress   String?
+  createdAt  DateTime @default(now())
+  business   Business @relation(fields: [businessId], references: [id])
+}
+
+model Subscription {
+  id        String   @id @default(cuid())
+  userId    String
+  plan      String   @default("free")
+  status    String   @default("active") // active, canceled, expired
+  startDate DateTime @default(now())
+  endDate   DateTime?
+  user      User     @relation(fields: [userId], references: [id])
+}
+
+model AiScanLog {
+  id         String   @id @default(cuid())
+  userId     String
+  businessId String?
+  imageUrl    String
+  result     String   // JSON string of detected items
+  itemCount  Int      @default(0)
+  createdAt  DateTime @default(now())
+}

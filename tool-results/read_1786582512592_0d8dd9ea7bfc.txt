@@ -1,0 +1,1131 @@
+     1→'use client'
+     2→
+     3→import { useEffect, useState, useCallback, useRef } from 'react'
+     4→import { useAuthStore, useMenuStore, type Category, type MenuItem } from '@/lib/stores'
+     5→import { categoryApi, itemApi, uploadApi } from '@/lib/api'
+     6→import { toast } from 'sonner'
+     7→import { Button } from '@/components/ui/button'
+     8→import { Card, CardContent } from '@/components/ui/card'
+     9→import { Input } from '@/components/ui/input'
+    10→import { Label } from '@/components/ui/label'
+    11→import { Textarea } from '@/components/ui/textarea'
+    12→import { Badge } from '@/components/ui/badge'
+    13→import { Switch } from '@/components/ui/switch'
+    14→import { Skeleton } from '@/components/ui/skeleton'
+    15→import { ScrollArea } from '@/components/ui/scroll-area'
+    16→import { Separator } from '@/components/ui/separator'
+    17→import {
+    18→  Dialog,
+    19→  DialogContent,
+    20→  DialogHeader,
+    21→  DialogTitle,
+    22→  DialogDescription,
+    23→  DialogFooter,
+    24→} from '@/components/ui/dialog'
+    25→import {
+    26→  AlertDialog,
+    27→  AlertDialogContent,
+    28→  AlertDialogHeader,
+    29→  AlertDialogTitle,
+    30→  AlertDialogDescription,
+    31→  AlertDialogFooter,
+    32→  AlertDialogCancel,
+    33→  AlertDialogAction,
+    34→} from '@/components/ui/alert-dialog'
+    35→import {
+    36→  DndContext,
+    37→  closestCenter,
+    38→  KeyboardSensor,
+    39→  PointerSensor,
+    40→  useSensor,
+    41→  useSensors,
+    42→  DragEndEvent,
+    43→} from '@dnd-kit/core'
+    44→import {
+    45→  SortableContext,
+    46→  sortableKeyboardCoordinates,
+    47→  verticalListSortingStrategy,
+    48→  useSortable,
+    49→} from '@dnd-kit/sortable'
+    50→import { CSS } from '@dnd-kit/utilities'
+    51→import {
+    52→  Plus,
+    53→  Pencil,
+    54→  Trash2,
+    55→  Eye,
+    56→  EyeOff,
+    57→  GripVertical,
+    58→  ImageOff,
+    59→  Copy,
+    60→  Loader2,
+    61→  Check,
+    62→  Save,
+    63→  UtensilsCrossed,
+    64→  FolderPlus,
+    65→  Utensils,
+    66→} from 'lucide-react'
+    67→
+    68→// ===== Auto-save indicator =====
+    69→function SaveIndicator({ saving }: { saving: boolean }) {
+    70→  return (
+    71→    <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+    72→      {saving ? (
+    73→        <>
+    74→          <Loader2 className="h-3 w-3 animate-spin" />
+    75→          <span>Saving...</span>
+    76→        </>
+    77→      ) : (
+    78→        <>
+    79→          <Check className="h-3 w-3 text-emerald-500" />
+    80→          <span className="text-emerald-600">Saved</span>
+    81→        </>
+    82→      )}
+    83→    </div>
+    84→  )
+    85→}
+    86→
+    87→// ===== Sortable Category Item =====
+    88→function SortableCategory({
+    89→  category,
+    90→  isSelected,
+    91→  itemCount,
+    92→  onSelect,
+    93→  onEdit,
+    94→  onDelete,
+    95→  onToggleVisibility,
+    96→}: {
+    97→  category: Category
+    98→  isSelected: boolean
+    99→  itemCount: number
+   100→  onSelect: () => void
+   101→  onEdit: () => void
+   102→  onDelete: () => void
+   103→  onToggleVisibility: () => void
+   104→}) {
+   105→  const {
+   106→    attributes,
+   107→    listeners,
+   108→    setNodeRef,
+   109→    transform,
+   110→    transition,
+   111→    isDragging,
+   112→  } = useSortable({ id: category.id })
+   113→
+   114→  const style = {
+   115→    transform: CSS.Transform.toString(transform),
+   116→    transition,
+   117→    zIndex: isDragging ? 50 : undefined,
+   118→  }
+   119→
+   120→  return (
+   121→    <div
+   122→      ref={setNodeRef}
+   123→      style={style}
+   124→      className={`group flex items-center gap-2 rounded-lg border px-3 py-2.5 transition-all duration-150 cursor-pointer
+   125→        ${isSelected
+   126→          ? 'border-[#e94560]/40 bg-[#e94560]/5 ring-1 ring-[#e94560]/20'
+   127→          : 'border-gray-200 bg-white hover:border-gray-300 hover:bg-gray-50'
+   128→        }
+   129→        ${isDragging ? 'opacity-90 shadow-lg' : ''}
+   130→      `}
+   131→    >
+   132→      {/* Drag Handle */}
+   133→      <button
+   134→        className="cursor-grab active:cursor-grabbing text-gray-300 hover:text-gray-500 transition-colors touch-none"
+   135→        {...attributes}
+   136→        {...listeners}
+   137→        onClick={(e) => e.stopPropagation()}
+   138→      >
+   139→        <GripVertical className="h-4 w-4" />
+   140→      </button>
+   141→
+   142→      {/* Category Info */}
+   143→      <button
+   144→        className="flex-1 min-w-0 text-left"
+   145→        onClick={onSelect}
+   146→      >
+   147→        <div className="flex items-center gap-2 min-w-0">
+   148→          <span className={`text-sm font-medium truncate ${category.isHidden ? 'text-muted-foreground line-through' : 'text-gray-900'}`}>
+   149→            {category.name}
+   150→          </span>
+   151→          <Badge variant="secondary" className="shrink-0 text-[10px] px-1.5 py-0 h-4">
+   152→            {itemCount}
+   153→          </Badge>
+   154→        </div>
+   155→      </button>
+   156→
+   157→      {/* Actions */}
+   158→      <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+   159→        <button
+   160→          onClick={(e) => { e.stopPropagation(); onToggleVisibility() }}
+   161→          className="p-1 rounded-md hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors"
+   162→          title={category.isHidden ? 'Show category' : 'Hide category'}
+   163→        >
+   164→          {category.isHidden ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+   165→        </button>
+   166→        <button
+   167→          onClick={(e) => { e.stopPropagation(); onEdit() }}
+   168→          className="p-1 rounded-md hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors"
+   169→          title="Edit category"
+   170→        >
+   171→          <Pencil className="h-3.5 w-3.5" />
+   172→        </button>
+   173→        <button
+   174→          onClick={(e) => { e.stopPropagation(); onDelete() }}
+   175→          className="p-1 rounded-md hover:bg-red-50 text-gray-400 hover:text-red-500 transition-colors"
+   176→          title="Delete category"
+   177→        >
+   178→          <Trash2 className="h-3.5 w-3.5" />
+   179→        </button>
+   180→      </div>
+   181→    </div>
+   182→  )
+   183→}
+   184→
+   185→// ===== Sortable Menu Item Card =====
+   186→function SortableMenuItemCard({
+   187→  item,
+   188→  onEdit,
+   189→  onDuplicate,
+   190→  onDelete,
+   191→  onToggleAvailability,
+   192→}: {
+   193→  item: MenuItem
+   194→  onEdit: () => void
+   195→  onDuplicate: () => void
+   196→  onDelete: () => void
+   197→  onToggleAvailability: () => void
+   198→}) {
+   199→  const {
+   200→    attributes,
+   201→    listeners,
+   202→    setNodeRef,
+   203→    transform,
+   204→    transition,
+   205→    isDragging,
+   206→  } = useSortable({ id: item.id })
+   207→
+   208→  const style = {
+   209→    transform: CSS.Transform.toString(transform),
+   210→    transition,
+   211→    zIndex: isDragging ? 50 : undefined,
+   212→  }
+   213→
+   214→  return (
+   215→    <Card
+   216→      ref={setNodeRef}
+   217→      style={style}
+   218→      className={`group transition-all duration-150 ${isDragging ? 'opacity-90 shadow-lg' : ''} ${!item.isAvailable ? 'opacity-60' : ''}`}
+   219→    >
+   220→      <CardContent className="p-3">
+   221→        <div className="flex gap-3">
+   222→          {/* Drag Handle */}
+   223→          <div className="flex flex-col items-center pt-1">
+   224→            <button
+   225→              className="cursor-grab active:cursor-grabbing text-gray-300 hover:text-gray-500 transition-colors touch-none"
+   226→              {...attributes}
+   227→              {...listeners}
+   228→            >
+   229→              <GripVertical className="h-4 w-4" />
+   230→            </button>
+   231→          </div>
+   232→
+   233→          {/* Thumbnail */}
+   234→          <div className="shrink-0 w-16 h-16 rounded-lg overflow-hidden bg-gray-100 flex items-center justify-center">
+   235→            {item.imageUrl ? (
+   236→              <img
+   237→                src={item.imageUrl}
+   238→                alt={item.name}
+   239→                className="w-full h-full object-cover"
+   240→                onError={(e) => {
+   241→                  ;(e.target as HTMLImageElement).style.display = 'none'
+   242→                  ;(e.target as HTMLImageElement).nextElementSibling?.classList.remove('hidden')
+   243→                }}
+   244→              />
+   245→            ) : null}
+   246→            <div className={`${item.imageUrl ? 'hidden' : ''} flex items-center justify-center`}>
+   247→              <ImageOff className="h-5 w-5 text-gray-300" />
+   248→            </div>
+   249→          </div>
+   250→
+   251→          {/* Info */}
+   252→          <div className="flex-1 min-w-0">
+   253→            <div className="flex items-start justify-between gap-2">
+   254→              <h4 className="text-sm font-semibold text-gray-900 truncate">{item.name}</h4>
+   255→              <span className="text-sm font-bold text-[#e94560] whitespace-nowrap">
+   256→                ₦{item.price.toLocaleString()}
+   257→              </span>
+   258→            </div>
+   259→            {item.description && (
+   260→              <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">
+   261→                {item.description}
+   262→              </p>
+   263→            )}
+   264→            <div className="flex items-center justify-between mt-2">
+   265→              <div className="flex items-center gap-2">
+   266→                <Switch
+   267→                  checked={item.isAvailable}
+   268→                  onCheckedChange={onToggleAvailability}
+   269→                  className="scale-75 origin-left"
+   270→                />
+   271→                <span className="text-[10px] text-muted-foreground">
+   272→                  {item.isAvailable ? 'Available' : 'Unavailable'}
+   273→                </span>
+   274→              </div>
+   275→              <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+   276→                <button
+   277→                  onClick={onEdit}
+   278→                  className="p-1 rounded-md hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors"
+   279→                  title="Edit item"
+   280→                >
+   281→                  <Pencil className="h-3.5 w-3.5" />
+   282→                </button>
+   283→                <button
+   284→                  onClick={onDuplicate}
+   285→                  className="p-1 rounded-md hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors"
+   286→                  title="Duplicate item"
+   287→                >
+   288→                  <Copy className="h-3.5 w-3.5" />
+   289→                </button>
+   290→                <button
+   291→                  onClick={onDelete}
+   292→                  className="p-1 rounded-md hover:bg-red-50 text-gray-400 hover:text-red-500 transition-colors"
+   293→                  title="Delete item"
+   294→                >
+   295→                  <Trash2 className="h-3.5 w-3.5" />
+   296→                </button>
+   297→              </div>
+   298→            </div>
+   299→          </div>
+   300→        </div>
+   301→      </CardContent>
+   302→    </Card>
+   303→  )
+   304→}
+   305→
+   306→// ===== Item Form Inner (remounts on key change) =====
+   307→function ItemFormInner({
+   308→  item,
+   309→  onSave,
+   310→  isSaving,
+   311→  onClose,
+   312→}: {
+   313→  item: MenuItem | null
+   314→  onSave: (data: { name: string; description: string; price: number; imageFile: File | null }) => void
+   315→  isSaving: boolean
+   316→  onClose: () => void
+   317→}) {
+   318→  const [name, setName] = useState(item?.name || '')
+   319→  const [description, setDescription] = useState(item?.description || '')
+   320→  const [price, setPrice] = useState(item ? String(item.price) : '')
+   321→  const [imageFile, setImageFile] = useState<File | null>(null)
+   322→  const [imagePreview, setImagePreview] = useState<string | null>(item?.imageUrl || null)
+   323→  const fileInputRef = useRef<HTMLInputElement>(null)
+   324→
+   325→  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+   326→    const file = e.target.files?.[0]
+   327→    if (!file) return
+   328→    if (file.size > 5 * 1024 * 1024) {
+   329→      toast.error('Image must be under 5MB')
+   330→      return
+   331→    }
+   332→    setImageFile(file)
+   333→    const reader = new FileReader()
+   334→    reader.onload = () => setImagePreview(reader.result as string)
+   335→    reader.readAsDataURL(file)
+   336→  }
+   337→
+   338→  const handleSubmit = (e: React.FormEvent) => {
+   339→    e.preventDefault()
+   340→    const parsedPrice = parseFloat(price)
+   341→    if (!name.trim()) {
+   342→      toast.error('Item name is required')
+   343→      return
+   344→    }
+   345→    if (isNaN(parsedPrice) || parsedPrice < 0) {
+   346→      toast.error('Please enter a valid price')
+   347→      return
+   348→    }
+   349→    onSave({ name: name.trim(), description: description.trim(), price: parsedPrice, imageFile })
+   350→  }
+   351→
+   352→  const isEditing = !!item
+   353→
+   354→  return (
+   355→    <Dialog open={open} onOpenChange={onOpenChange}>
+   356→      <DialogContent className="sm:max-w-md">
+   357→        <DialogHeader>
+   358→          <DialogTitle>{isEditing ? 'Edit Menu Item' : 'Add Menu Item'}</DialogTitle>
+   359→          <DialogDescription>
+   360→            {isEditing ? 'Update the details of this menu item.' : 'Add a new item to this category.'}
+   361→          </DialogDescription>
+   362→        </DialogHeader>
+   363→        <form onSubmit={handleSubmit} className="space-y-4">
+   364→          {/* Image Upload */}
+   365→          <div className="space-y-2">
+   366→            <Label>Food Image</Label>
+   367→            <div
+   368→              className="relative border-2 border-dashed border-gray-200 rounded-lg p-4 text-center cursor-pointer hover:border-gray-300 transition-colors"
+   369→              onClick={() => fileInputRef.current?.click()}
+   370→            >
+   371→              <input
+   372→                ref={fileInputRef}
+   373→                type="file"
+   374→                accept="image/jpeg,image/png,image/webp"
+   375→                className="hidden"
+   376→                onChange={handleImageChange}
+   377→              />
+   378→              {imagePreview ? (
+   379→                <div className="relative inline-block">
+   380→                  <img
+   381→                    src={imagePreview}
+   382→                    alt="Preview"
+   383→                    className="w-full max-h-40 object-contain rounded-md"
+   384→                  />
+   385→                  <button
+   386→                    type="button"
+   387→                    onClick={(e) => {
+   388→                      e.stopPropagation()
+   389→                      setImageFile(null)
+   390→                      setImagePreview(isEditing && item?.imageUrl ? item.imageUrl : null)
+   391→                    }}
+   392→                    className="absolute top-1 right-1 p-1 rounded-full bg-black/50 text-white hover:bg-black/70 transition-colors"
+   393→                  >
+   394→                    <Trash2 className="h-3 w-3" />
+   395→                  </button>
+   396→                </div>
+   397→              ) : (
+   398→                <div className="py-4">
+   399→                  <ImageOff className="h-8 w-8 text-gray-300 mx-auto mb-2" />
+   400→                  <p className="text-xs text-muted-foreground">Click to upload image</p>
+   401→                  <p className="text-[10px] text-muted-foreground mt-1">JPG, PNG, WEBP (max 5MB)</p>
+   402→                </div>
+   403→              )}
+   404→            </div>
+   405→          </div>
+   406→
+   407→          {/* Name */}
+   408→          <div className="space-y-2">
+   409→            <Label htmlFor="item-name">
+   410→              Item Name <span className="text-red-500">*</span>
+   411→            </Label>
+   412→            <Input
+   413→              id="item-name"
+   414→              placeholder="e.g. Jollof Rice"
+   415→              value={name}
+   416→              onChange={(e) => setName(e.target.value)}
+   417→              required
+   418→            />
+   419→          </div>
+   420→
+   421→          {/* Description */}
+   422→          <div className="space-y-2">
+   423→            <Label htmlFor="item-desc">Description</Label>
+   424→            <Textarea
+   425→              id="item-desc"
+   426→              placeholder="Brief description of the dish..."
+   427→              value={description}
+   428→              onChange={(e) => setDescription(e.target.value)}
+   429→              rows={3}
+   430→              className="resize-none"
+   431→            />
+   432→          </div>
+   433→
+   434→          {/* Price */}
+   435→          <div className="space-y-2">
+   436→            <Label htmlFor="item-price">
+   437→              Price (₦) <span className="text-red-500">*</span>
+   438→            </Label>
+   439→            <div className="relative">
+   440→              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground font-medium">
+   441→                ₦
+   442→              </span>
+   443→              <Input
+   444→                id="item-price"
+   445→                type="number"
+   446→                step="0.01"
+   447→                min="0"
+   448→                placeholder="0.00"
+   449→                value={price}
+   450→                onChange={(e) => setPrice(e.target.value)}
+   451→                className="pl-8"
+   452→                required
+   453→              />
+   454→            </div>
+   455→          </div>
+   456→
+   457→          <DialogFooter>
+   458→            <Button
+   459→              type="button"
+   460→              variant="outline"
+   461→              onClick={() => onOpenChange(false)}
+   462→              disabled={isSaving}
+   463→            >
+   464→              Cancel
+   465→            </Button>
+   466→            <Button type="submit" disabled={isSaving} className="bg-[#e94560] hover:bg-[#d13a54] text-white">
+   467→              {isSaving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+   468→              {isEditing ? 'Update Item' : 'Add Item'}
+   469→            </Button>
+   470→          </DialogFooter>
+   471→        </form>
+   472→      </DialogContent>
+   473→    </Dialog>
+   474→  )
+   475→}
+   476→
+   477→// ===== Main MenuManagerPage Component =====
+   478→export function MenuManagerPage() {
+   479→  const { currentBusiness } = useAuthStore()
+   480→  const {
+   481→    categories,
+   482→    setCategories,
+   483→    addCategory,
+   484→    updateCategory,
+   485→    removeCategory,
+   486→    reorderCategories,
+   487→    addItem,
+   488→    updateItem,
+   489→    removeItem,
+   490→    reorderItems,
+   491→    duplicateItem,
+   492→  } = useMenuStore()
+   493→
+   494→  // UI State
+   495→  const [loading, setLoading] = useState(true)
+   496→  const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null)
+   497→  const [saving, setSaving] = useState(false)
+   498→  const savingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+   499→
+   500→  // Category Dialog State
+   501→  const [categoryDialogOpen, setCategoryDialogOpen] = useState(false)
+   502→  const [editingCategory, setEditingCategory] = useState<Category | null>(null)
+   503→  const [categoryName, setCategoryName] = useState('')
+   504→  const [categorySaving, setCategorySaving] = useState(false)
+   505→
+   506→  // Item Dialog State
+   507→  const [itemDialogOpen, setItemDialogOpen] = useState(false)
+   508→  const [editingItem, setEditingItem] = useState<MenuItem | null>(null)
+   509→  const [itemSaving, setItemSaving] = useState(false)
+   510→
+   511→  // Delete Confirmation
+   512→  const [deleteTarget, setDeleteTarget] = useState<{ type: 'category' | 'item'; id: string; name: string } | null>(null)
+   513→  const [deleting, setDeleting] = useState(false)
+   514→
+   515→  // DnD Sensors
+   516→  const categorySensors = useSensors(
+   517→    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+   518→    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+   519→  )
+   520→  const itemSensors = useSensors(
+   521→    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+   522→    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+   523→  )
+   524→
+   525→  const bizId = currentBusiness?.id
+   526→  const selectedCategory = categories.find((c) => c.id === selectedCategoryId)
+   527→  const selectedItems = selectedCategory?.items || []
+   528→
+   529→  // ===== Trigger auto-save indicator =====
+   530→  const triggerSaving = useCallback(() => {
+   531→    setSaving(true)
+   532→    if (savingTimerRef.current) clearTimeout(savingTimerRef.current)
+   533→    savingTimerRef.current = setTimeout(() => setSaving(false), 1500)
+   534→  }, [])
+   535→
+   536→  // ===== Fetch categories on mount =====
+   537→  useEffect(() => {
+   538→    if (!bizId) return
+   539→    let cancelled = false
+   540→    setLoading(true)
+   541→    categoryApi
+   542→      .list(bizId)
+   543→      .then((data) => {
+   544→        if (cancelled) return
+   545→        // The API returns categories with items nested
+   546→        const cats: Category[] = (data.categories || data || []).map(
+   547→          (c: Record<string, unknown>, idx: number) => ({
+   548→            id: c.id,
+   549→            name: c.name,
+   550→            sortOrder: (c.sortOrder as number) ?? idx,
+   551→            isHidden: (c.isHidden as boolean) ?? false,
+   552→            items: ((c.items as MenuItem[]) || []).map((i, iIdx) => ({
+   553→              id: i.id,
+   554→              name: i.name,
+   555→              description: i.description,
+   556→              price: i.price,
+   557→              imageUrl: i.imageUrl,
+   558→              categoryId: i.categoryId || c.id,
+   559→              sortOrder: i.sortOrder ?? iIdx,
+   560→              isAvailable: i.isAvailable ?? true,
+   561→              isHidden: i.isHidden ?? false,
+   562→            })),
+   563→          })
+   564→        )
+   565→        setCategories(cats)
+   566→        if (cats.length > 0) setSelectedCategoryId(cats[0].id)
+   567→      })
+   568→      .catch((err) => toast.error(err.message || 'Failed to load menu'))
+   569→      .finally(() => !cancelled && setLoading(false))
+   570→    return () => { cancelled = true }
+   571→  }, [bizId, setCategories])
+   572→
+   573→  // Cleanup timer
+   574→  useEffect(() => {
+   575→    return () => {
+   576→      if (savingTimerRef.current) clearTimeout(savingTimerRef.current)
+   577→    }
+   578→  }, [])
+   579→
+   580→  // ===== Category Handlers =====
+   581→  const handleAddCategory = async () => {
+   582→    if (!bizId || !categoryName.trim()) return
+   583→    setCategorySaving(true)
+   584→    try {
+   585→      const data = await categoryApi.create(bizId, { name: categoryName.trim() })
+   586→      const newCat: Category = {
+   587→        id: data.id || data.category?.id || crypto.randomUUID(),
+   588→        name: categoryName.trim(),
+   589→        sortOrder: categories.length,
+   590→        isHidden: false,
+   591→        items: [],
+   592→        _isNew: true,
+   593→      }
+   594→      addCategory(newCat)
+   595→      setSelectedCategoryId(newCat.id)
+   596→      setCategoryName('')
+   597→      setCategoryDialogOpen(false)
+   598→      toast.success(`Category "${newCat.name}" created`)
+   599→    } catch (err) {
+   600→      toast.error((err as Error).message || 'Failed to create category')
+   601→    } finally {
+   602→      setCategorySaving(false)
+   603→    }
+   604→  }
+   605→
+   606→  const handleUpdateCategory = async () => {
+   607→    if (!bizId || !editingCategory || !categoryName.trim()) return
+   608→    setCategorySaving(true)
+   609→    try {
+   610→      await categoryApi.update(bizId, editingCategory.id, { name: categoryName.trim() })
+   611→      updateCategory(editingCategory.id, { name: categoryName.trim() })
+   612→      setCategoryName('')
+   613→      setEditingCategory(null)
+   614→      setCategoryDialogOpen(false)
+   615→      toast.success('Category updated')
+   616→    } catch (err) {
+   617→      toast.error((err as Error).message || 'Failed to update category')
+   618→    } finally {
+   619→      setCategorySaving(false)
+   620→    }
+   621→  }
+   622→
+   623→  const handleDeleteCategory = async () => {
+   624→    if (!bizId || !deleteTarget || deleteTarget.type !== 'category') return
+   625→    setDeleting(true)
+   626→    try {
+   627→      await categoryApi.delete(bizId, deleteTarget.id)
+   628→      removeCategory(deleteTarget.id)
+   629→      if (selectedCategoryId === deleteTarget.id) {
+   630→        setSelectedCategoryId(categories[0]?.id || null)
+   631→      }
+   632→      toast.success(`Category "${deleteTarget.name}" deleted`)
+   633→    } catch (err) {
+   634→      toast.error((err as Error).message || 'Failed to delete category')
+   635→    } finally {
+   636→      setDeleting(false)
+   637→      setDeleteTarget(null)
+   638→    }
+   639→  }
+   640→
+   641→  const handleToggleCategoryVisibility = async (cat: Category) => {
+   642→    if (!bizId) return
+   643→    const newVal = !cat.isHidden
+   644→    updateCategory(cat.id, { isHidden: newVal })
+   645→    try {
+   646→      await categoryApi.update(bizId, cat.id, { isHidden: newVal })
+   647→    } catch (err) {
+   648→      updateCategory(cat.id, { isHidden: cat.isHidden })
+   649→      toast.error((err as Error).message || 'Failed to update visibility')
+   650→    }
+   651→  }
+   652→
+   653→  // ===== Category DnD =====
+   654→  const handleCategoryDragEnd = (event: DragEndEvent) => {
+   655→    const { active, over } = event
+   656→    if (!over || active.id === over.id) return
+   657→    const oldIdx = categories.findIndex((c) => c.id === active.id)
+   658→    const newIdx = categories.findIndex((c) => c.id === over.id)
+   659→    if (oldIdx === -1 || newIdx === -1) return
+   660→    const reordered = [...categories]
+   661→    const [moved] = reordered.splice(oldIdx, 1)
+   662→    reordered.splice(newIdx, 0, moved)
+   663→    // Update sortOrder
+   664→    const withOrder = reordered.map((c, i) => ({ ...c, sortOrder: i }))
+   665→    reorderCategories(withOrder)
+   666→    triggerSaving()
+   667→    // Persist to backend
+   668→    if (bizId) {
+   669→      categoryApi
+   670→        .reorder(bizId, withOrder.map((c) => ({ id: c.id, sortOrder: c.sortOrder })))
+   671→        .catch(() => toast.error('Failed to save category order'))
+   672→    }
+   673→  }
+   674→
+   675→  // ===== Item Handlers =====
+   676→  const handleSaveItem = async (data: { name: string; description: string; price: number; imageFile: File | null }) => {
+   677→    if (!bizId || !selectedCategoryId) return
+   678→    setItemSaving(true)
+   679→    try {
+   680→      let imageUrl: string | null = editingItem?.imageUrl || null
+   681→      // Upload image if provided
+   682→      if (data.imageFile) {
+   683→        const uploadRes = await uploadApi.upload(data.imageFile)
+   684→        imageUrl = uploadRes.url
+   685→      }
+   686→      const fd = new FormData()
+   687→      fd.append('name', data.name)
+   688→      fd.append('description', data.description)
+   689→      fd.append('price', String(data.price))
+   690→      if (imageUrl) fd.append('imageUrl', imageUrl)
+   691→      // Remove image if cleared
+   692→      if (!data.imageFile && !editingItem?.imageUrl) {
+   693→        fd.append('imageUrl', '')
+   694→      }
+   695→
+   696→      if (editingItem) {
+   697→        // Update
+   698→        const updated = await itemApi.update(bizId, selectedCategoryId, editingItem.id, fd)
+   699→        updateItem(selectedCategoryId, editingItem.id, {
+   700→          name: data.name,
+   701→          description: data.description || null,
+   702→          price: data.price,
+   703→          imageUrl,
+   704→          isAvailable: editingItem.isAvailable,
+   705→        })
+   706→        toast.success('Item updated')
+   707→      } else {
+   708→        // Create
+   709→        const created = await itemApi.create(bizId, selectedCategoryId, fd)
+   710→        const newItem: MenuItem = {
+   711→          id: created.id || created.item?.id || crypto.randomUUID(),
+   712→          name: data.name,
+   713→          description: data.description || null,
+   714→          price: data.price,
+   715→          imageUrl,
+   716→          categoryId: selectedCategoryId,
+   717→          sortOrder: selectedItems.length,
+   718→          isAvailable: true,
+   719→          isHidden: false,
+   720→        }
+   721→        addItem(selectedCategoryId, newItem)
+   722→        toast.success(`"${data.name}" added`)
+   723→      }
+   724→      setItemDialogOpen(false)
+   725→      setEditingItem(null)
+   726→    } catch (err) {
+   727→      toast.error((err as Error).message || 'Failed to save item')
+   728→    } finally {
+   729→      setItemSaving(false)
+   730→    }
+   731→  }
+   732→
+   733→  const handleDeleteItem = async () => {
+   734→    if (!bizId || !selectedCategoryId || !deleteTarget || deleteTarget.type !== 'item') return
+   735→    setDeleting(true)
+   736→    try {
+   737→      await itemApi.delete(bizId, selectedCategoryId, deleteTarget.id)
+   738→      removeItem(selectedCategoryId, deleteTarget.id)
+   739→      toast.success(`"${deleteTarget.name}" deleted`)
+   740→    } catch (err) {
+   741→      toast.error((err as Error).message || 'Failed to delete item')
+   742→    } finally {
+   743→      setDeleting(false)
+   744→      setDeleteTarget(null)
+   745→    }
+   746→  }
+   747→
+   748→  const handleDuplicateItem = (item: MenuItem) => {
+   749→    if (!selectedCategoryId) return
+   750→    duplicateItem(selectedCategoryId, item.id)
+   751→    toast.success(`"${item.name}" duplicated`)
+   752→    // Persist the new duplicated item
+   753→    const cat = categories.find((c) => c.id === selectedCategoryId)
+   754→    if (cat && bizId) {
+   755→      const idx = cat.items.findIndex((i) => i.id === item.id)
+   756→      const dup = cat.items[idx + 1]
+   757→      if (dup && dup._isNew) {
+   758→        const fd = new FormData()
+   759→        fd.append('name', dup.name)
+   760→        fd.append('description', dup.description || '')
+   761→        fd.append('price', String(dup.price))
+   762→        if (dup.imageUrl) fd.append('imageUrl', dup.imageUrl)
+   763→        itemApi.create(bizId, selectedCategoryId, fd).catch(() => {
+   764→          toast.error('Failed to save duplicated item')
+   765→        })
+   766→      }
+   767→    }
+   768→  }
+   769→
+   770→  const handleToggleItemAvailability = async (item: MenuItem) => {
+   771→    if (!selectedCategoryId) return
+   772→    const newVal = !item.isAvailable
+   773→    updateItem(selectedCategoryId, item.id, { isAvailable: newVal })
+   774→    try {
+   775→      if (!bizId) return
+   776→      const fd = new FormData()
+   777→      fd.append('name', item.name)
+   778→      fd.append('description', item.description || '')
+   779→      fd.append('price', String(item.price))
+   780→      fd.append('isAvailable', String(newVal))
+   781→      if (item.imageUrl) fd.append('imageUrl', item.imageUrl)
+   782→      await itemApi.update(bizId, selectedCategoryId, item.id, fd)
+   783→    } catch (err) {
+   784→      updateItem(selectedCategoryId, item.id, { isAvailable: item.isAvailable })
+   785→      toast.error((err as Error).message || 'Failed to update availability')
+   786→    }
+   787→  }
+   788→
+   789→  // ===== Item DnD =====
+   790→  const handleItemDragEnd = (event: DragEndEvent) => {
+   791→    const { active, over } = event
+   792→    if (!over || active.id === over.id || !selectedCategoryId) return
+   793→    const oldIdx = selectedItems.findIndex((i) => i.id === active.id)
+   794→    const newIdx = selectedItems.findIndex((i) => i.id === over.id)
+   795→    if (oldIdx === -1 || newIdx === -1) return
+   796→    const reordered = [...selectedItems]
+   797→    const [moved] = reordered.splice(oldIdx, 1)
+   798→    reordered.splice(newIdx, 0, moved)
+   799→    const withOrder = reordered.map((i, idx) => ({ ...i, sortOrder: idx }))
+   800→    reorderItems(selectedCategoryId, withOrder)
+   801→    triggerSaving()
+   802→    if (bizId) {
+   803→      itemApi
+   804→        .reorder(bizId, withOrder.map((i) => ({ id: i.id, sortOrder: i.sortOrder })))
+   805→        .catch(() => toast.error('Failed to save item order'))
+   806→    }
+   807→  }
+   808→
+   809→  // ===== Open edit category dialog =====
+   810→  const openEditCategoryDialog = (cat: Category) => {
+   811→    setEditingCategory(cat)
+   812→    setCategoryName(cat.name)
+   813→    setCategoryDialogOpen(true)
+   814→  }
+   815→
+   816→  const openAddCategoryDialog = () => {
+   817→    setEditingCategory(null)
+   818→    setCategoryName('')
+   819→    setCategoryDialogOpen(true)
+   820→  }
+   821→
+   822→  // ===== Loading State =====
+   823→  if (loading) {
+   824→    return (
+   825→      <div className="space-y-6">
+   826→        <div className="flex items-center justify-between">
+   827→          <Skeleton className="h-8 w-48" />
+   828→          <Skeleton className="h-9 w-32" />
+   829→        </div>
+   830→        <div className="grid grid-cols-1 lg:grid-cols-[320px_1fr] gap-6">
+   831→          <div className="space-y-3">
+   832→            {Array.from({ length: 4 }).map((_, i) => (
+   833→              <Skeleton key={i} className="h-12 w-full rounded-lg" />
+   834→            ))}
+   835→          </div>
+   836→          <div className="space-y-3">
+   837→            {Array.from({ length: 3 }).map((_, i) => (
+   838→              <Skeleton key={i} className="h-24 w-full rounded-lg" />
+   839→            ))}
+   840→          </div>
+   841→        </div>
+   842→      </div>
+   843→    )
+   844→  }
+   845→
+   846→  return (
+   847→    <div className="space-y-4">
+   848→      {/* Header */}
+   849→      <div className="flex items-center justify-between">
+   850→        <div>
+   851→          <h2 className="text-xl font-bold text-gray-900">Menu Manager</h2>
+   852→          <p className="text-sm text-muted-foreground mt-0.5">
+   853→            Create and organize your menu categories and items
+   854→          </p>
+   855→        </div>
+   856→        <SaveIndicator saving={saving} />
+   857→      </div>
+   858→
+   859→      <Separator />
+   860→
+   861→      {/* Two-Column Layout */}
+   862→      <div className="grid grid-cols-1 lg:grid-cols-[320px_1fr] gap-6">
+   863→        {/* ===== LEFT PANEL: Categories ===== */}
+   864→        <div className="space-y-3">
+   865→          <div className="flex items-center justify-between">
+   866→            <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider">
+   867→              Categories
+   868→            </h3>
+   869→            <Button
+   870→              size="sm"
+   871→              onClick={openAddCategoryDialog}
+   872→              className="bg-[#e94560] hover:bg-[#d13a54] text-white h-8 gap-1.5 text-xs"
+   873→            >
+   874→              <Plus className="h-3.5 w-3.5" />
+   875→              Add
+   876→            </Button>
+   877→          </div>
+   878→
+   879→          {categories.length === 0 ? (
+   880→            <Card className="border-dashed">
+   881→              <CardContent className="p-6 text-center">
+   882→                <FolderPlus className="h-10 w-10 text-gray-300 mx-auto mb-3" />
+   883→                <p className="text-sm font-medium text-gray-600">No categories yet</p>
+   884→                <p className="text-xs text-muted-foreground mt-1">
+   885→                  Create your first menu category
+   886→                </p>
+   887→                <Button
+   888→                  size="sm"
+   889→                  onClick={openAddCategoryDialog}
+   890→                  className="mt-3 bg-[#e94560] hover:bg-[#d13a54] text-white h-8 gap-1.5 text-xs"
+   891→                >
+   892→                  <Plus className="h-3.5 w-3.5" />
+   893→                  Create Category
+   894→                </Button>
+   895→              </CardContent>
+   896→            </Card>
+   897→          ) : (
+   898→            <ScrollArea className="max-h-[calc(100vh-220px)]">
+   899→              <DndContext
+   900→                sensors={categorySensors}
+   901→                collisionDetection={closestCenter}
+   902→                onDragEnd={handleCategoryDragEnd}
+   903→              >
+   904→                <SortableContext
+   905→                  items={categories.map((c) => c.id)}
+   906→                  strategy={verticalListSortingStrategy}
+   907→                >
+   908→                  <div className="space-y-2 pr-1">
+   909→                    {categories.map((cat) => (
+   910→                      <SortableCategory
+   911→                        key={cat.id}
+   912→                        category={cat}
+   913→                        isSelected={selectedCategoryId === cat.id}
+   914→                        itemCount={cat.items.length}
+   915→                        onSelect={() => setSelectedCategoryId(cat.id)}
+   916→                        onEdit={() => openEditCategoryDialog(cat)}
+   917→                        onDelete={() =>
+   918→                          setDeleteTarget({ type: 'category', id: cat.id, name: cat.name })
+   919→                        }
+   920→                        onToggleVisibility={() => handleToggleCategoryVisibility(cat)}
+   921→                      />
+   922→                    ))}
+   923→                  </div>
+   924→                </SortableContext>
+   925→              </DndContext>
+   926→            </ScrollArea>
+   927→          )}
+   928→        </div>
+   929→
+   930→        {/* ===== RIGHT PANEL: Items ===== */}
+   931→        <div className="space-y-3">
+   932→          {selectedCategory ? (
+   933→            <>
+   934→              <div className="flex items-center justify-between">
+   935→                <div className="flex items-center gap-2 min-w-0">
+   936→                  <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider">
+   937→                    {selectedCategory.name}
+   938→                  </h3>
+   939→                  <Badge variant="secondary" className="text-[10px]">
+   940→                    {selectedItems.length} item{selectedItems.length !== 1 ? 's' : ''}
+   941→                  </Badge>
+   942→                </div>
+   943→                <Button
+   944→                  size="sm"
+   945→                  onClick={() => {
+   946→                    setEditingItem(null)
+   947→                    setItemDialogOpen(true)
+   948→                  }}
+   949→                  className="bg-[#e94560] hover:bg-[#d13a54] text-white h-8 gap-1.5 text-xs"
+   950→                >
+   951→                  <Plus className="h-3.5 w-3.5" />
+   952→                  Add Item
+   953→                </Button>
+   954→              </div>
+   955→
+   956→              {selectedItems.length === 0 ? (
+   957→                <Card className="border-dashed">
+   958→                  <CardContent className="p-8 text-center">
+   959→                    <Utensils className="h-10 w-10 text-gray-300 mx-auto mb-3" />
+   960→                    <p className="text-sm font-medium text-gray-600">No items yet</p>
+   961→                    <p className="text-xs text-muted-foreground mt-1">
+   962→                      Add your first menu item to &quot;{selectedCategory.name}&quot;
+   963→                    </p>
+   964→                    <Button
+   965→                      size="sm"
+   966→                      onClick={() => {
+   967→                        setEditingItem(null)
+   968→                        setItemDialogOpen(true)
+   969→                      }}
+   970→                      className="mt-3 bg-[#e94560] hover:bg-[#d13a54] text-white h-8 gap-1.5 text-xs"
+   971→                    >
+   972→                      <Plus className="h-3.5 w-3.5" />
+   973→                      Add Item
+   974→                    </Button>
+   975→                  </CardContent>
+   976→                </Card>
+   977→              ) : (
+   978→                <ScrollArea className="max-h-[calc(100vh-220px)]">
+   979→                  <DndContext
+   980→                    sensors={itemSensors}
+   981→                    collisionDetection={closestCenter}
+   982→                    onDragEnd={handleItemDragEnd}
+   983→                  >
+   984→                    <SortableContext
+   985→                      items={selectedItems.map((i) => i.id)}
+   986→                      strategy={verticalListSortingStrategy}
+   987→                    >
+   988→                      <div className="space-y-2 pr-1">
+   989→                        {selectedItems.map((item) => (
+   990→                          <SortableMenuItemCard
+   991→                            key={item.id}
+   992→                            item={item}
+   993→                            onEdit={() => {
+   994→                              setEditingItem(item)
+   995→                              setItemDialogOpen(true)
+   996→                            }}
+   997→                            onDuplicate={() => handleDuplicateItem(item)}
+   998→                            onDelete={() =>
+   999→                              setDeleteTarget({ type: 'item', id: item.id, name: item.name })
+  1000→                            }
+  1001→                            onToggleAvailability={() => handleToggleItemAvailability(item)}
+  1002→                          />
+  1003→                        ))}
+  1004→                      </div>
+  1005→                    </SortableContext>
+  1006→                  </DndContext>
+  1007→                </ScrollArea>
+  1008→              )}
+  1009→            </>
+  1010→          ) : (
+  1011→            <Card className="border-dashed">
+  1012→              <CardContent className="p-8 text-center">
+  1013→                <UtensilsCrossed className="h-12 w-12 text-gray-300 mx-auto mb-3" />
+  1014→                <p className="text-sm font-medium text-gray-600">Select a category</p>
+  1015→                <p className="text-xs text-muted-foreground mt-1">
+  1016→                  Choose a category from the left to view and manage its items
+  1017→                </p>
+  1018→              </CardContent>
+  1019→            </Card>
+  1020→          )}
+  1021→        </div>
+  1022→      </div>
+  1023→
+  1024→      {/* ===== Category Add/Edit Dialog ===== */}
+  1025→      <Dialog open={categoryDialogOpen} onOpenChange={(open) => {
+  1026→        setCategoryDialogOpen(open)
+  1027→        if (!open) { setEditingCategory(null); setCategoryName('') }
+  1028→      }}>
+  1029→        <DialogContent className="sm:max-w-sm">
+  1030→          <DialogHeader>
+  1031→            <DialogTitle>
+  1032→              {editingCategory ? 'Rename Category' : 'New Category'}
+  1033→            </DialogTitle>
+  1034→            <DialogDescription>
+  1035→              {editingCategory
+  1036→                ? 'Enter a new name for this category.'
+  1037→                : 'Categories help organize your menu items.'}
+  1038→            </DialogDescription>
+  1039→          </DialogHeader>
+  1040→          <form
+  1041→            onSubmit={(e) => {
+  1042→              e.preventDefault()
+  1043→              if (editingCategory) handleUpdateCategory()
+  1044→              else handleAddCategory()
+  1045→            }}
+  1046→            className="space-y-4"
+  1047→          >
+  1048→            <div className="space-y-2">
+  1049→              <Label htmlFor="cat-name">
+  1050→                Category Name <span className="text-red-500">*</span>
+  1051→              </Label>
+  1052→              <Input
+  1053→                id="cat-name"
+  1054→                placeholder="e.g. Main Dishes"
+  1055→                value={categoryName}
+  1056→                onChange={(e) => setCategoryName(e.target.value)}
+  1057→                autoFocus
+  1058→                required
+  1059→              />
+  1060→            </div>
+  1061→            <DialogFooter>
+  1062→              <Button
+  1063→                type="button"
+  1064→                variant="outline"
+  1065→                onClick={() => setCategoryDialogOpen(false)}
+  1066→                disabled={categorySaving}
+  1067→              >
+  1068→                Cancel
+  1069→              </Button>
+  1070→              <Button
+  1071→                type="submit"
+  1072→                disabled={categorySaving || !categoryName.trim()}
+  1073→                className="bg-[#e94560] hover:bg-[#d13a54] text-white"
+  1074→              >
+  1075→                {categorySaving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+  1076→                {editingCategory ? 'Update' : 'Create'}
+  1077→              </Button>
+  1078→            </DialogFooter>
+  1079→          </form>
+  1080→        </DialogContent>
+  1081→      </Dialog>
+  1082→
+  1083→      {/* ===== Item Add/Edit Dialog ===== */}
+  1084→      <ItemFormDialog
+  1085→        open={itemDialogOpen}
+  1086→        onOpenChange={(open) => {
+  1087→          setItemDialogOpen(open)
+  1088→          if (!open) setEditingItem(null)
+  1089→        }}
+  1090→        item={editingItem}
+  1091→        onSave={handleSaveItem}
+  1092→        isSaving={itemSaving}
+  1093→      />
+  1094→
+  1095→      {/* ===== Delete Confirmation Dialog ===== */}
+  1096→      <AlertDialog
+  1097→        open={!!deleteTarget}
+  1098→        onOpenChange={(open) => !open && setDeleteTarget(null)}
+  1099→      >
+  1100→        <AlertDialogContent>
+  1101→          <AlertDialogHeader>
+  1102→            <AlertDialogTitle>Delete {deleteTarget?.type === 'category' ? 'Category' : 'Item'}</AlertDialogTitle>
+  1103→            <AlertDialogDescription>
+  1104→              Are you sure you want to delete &quot;{deleteTarget?.name}&quot;?
+  1105→              {deleteTarget?.type === 'category' && (
+  1106→                <span className="block mt-1 text-red-500 font-medium">
+  1107→                  This will also delete all {categories.find((c) => c.id === deleteTarget?.id)?.items.length || 0} items in this category.
+  1108→                </span>
+  1109→              )}
+  1110→              This action cannot be undone.
+  1111→            </AlertDialogDescription>
+  1112→          </AlertDialogHeader>
+  1113→          <AlertDialogFooter>
+  1114→            <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
+  1115→            <AlertDialogAction
+  1116→              onClick={() => {
+  1117→                if (deleteTarget?.type === 'category') handleDeleteCategory()
+  1118→                else handleDeleteItem()
+  1119→              }}
+  1120→              disabled={deleting}
+  1121→              className="bg-red-600 hover:bg-red-700 text-white"
+  1122→            >
+  1123→              {deleting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+  1124→              Delete
+  1125→            </AlertDialogAction>
+  1126→          </AlertDialogFooter>
+  1127→        </AlertDialogContent>
+  1128→      </AlertDialog>
+  1129→    </div>
+  1130→  )
+  1131→}

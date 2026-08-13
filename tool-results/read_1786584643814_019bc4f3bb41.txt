@@ -1,0 +1,744 @@
+    50→  'Sides',
+    51→  'Desserts',
+    52→  'Beverages',
+    53→  'Smoothies',
+    54→  'Coffee & Tea',
+    55→  'Alcoholic Drinks',
+    56→  'Breakfast',
+    57→  'Snacks',
+    58→  'Swallow & Soups',
+    59→  'Proteins',
+    60→  'Others',
+    61→]
+    62→
+    63→// ===== AI Vision Integration =====
+    64→async function scanWithAI(imageBase64: string): Promise<any[]> {
+    65→  const { createVlm } = await import('z-ai-web-dev-sdk')
+    66→  const vlm = createVlm({ apiKey: process.env.NEXT_PUBLIC_ZAI_API_KEY || '' })
+    67→  const result = await vlm.chat({
+    68→    messages: [
+    69→      {
+    70→        role: 'user',
+    71→        content: [
+    72→          {
+    73→            type: 'text',
+    74→            text: 'Analyze this restaurant menu image. Extract all menu items. For each item, provide: name, description (brief), price (numeric only, handle Nigerian Naira ₦ symbol), and category. Return ONLY a JSON array of objects with fields: name, description, price, category. If you cannot determine a field, use empty string or 0. Example: [{"name":"Chicken Burger","description":"Crispy chicken patty","price":4500,"category":"Burgers"}]',
+    75→          },
+    76→          { type: 'image_url', image_url: { url: imageBase64 } },
+    77→        ],
+    78→      },
+    79→    ],
+    80→  })
+    81→  const content = result.choices?.[0]?.message?.content || '[]'
+    82→  const jsonMatch = content.match(/\[[\s\S]*\]/)
+    83→  if (jsonMatch) {
+    84→    return JSON.parse(jsonMatch[0])
+    85→  }
+    86→  return []
+    87→}
+    88→
+    89→// ===== File to Base64 =====
+    90→function fileToBase64(file: File): Promise<string> {
+    91→  return new Promise((resolve, reject) => {
+    92→    const reader = new FileReader()
+    93→    reader.onload = () => resolve(reader.result as string)
+    94→    reader.onerror = reject
+    95→    reader.readAsDataURL(file)
+    96→  })
+    97→}
+    98→
+    99→// ===== Step type =====
+   100→type Step = 'upload' | 'scanning' | 'review'
+   101→
+   102→// ===== Detected Item Row =====
+   103→function DetectedItemRow({
+   104→  item,
+   105→  index,
+   106→  onUpdate,
+   107→  onRemove,
+   108→}: {
+   109→  item: DetectedItem
+   110→  index: number
+   111→  onUpdate: (idx: number, data: Partial<DetectedItem>) => void
+   112→  onRemove: (idx: number) => void
+   113→}) {
+   114→  const isCommonCategory = COMMON_CATEGORIES.includes(item.category)
+   115→
+   116→  return (
+   117→    <Card className="overflow-hidden">
+   118→      <CardContent className="p-3 sm:p-4">
+   119→        <div className="flex items-start gap-3">
+   120→          {/* Index Badge */}
+   121→          <div className="hidden sm:flex h-8 w-8 rounded-lg bg-gray-100 items-center justify-center shrink-0 mt-0.5">
+   122→            <span className="text-xs font-bold text-gray-500">{index + 1}</span>
+   123→          </div>
+   124→
+   125→          {/* Fields */}
+   126→          <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-2 sm:gap-3">
+   127→            {/* Name */}
+   128→            <div className="lg:col-span-3">
+   129→              <Label className="text-[11px] text-muted-foreground mb-1 block">Name</Label>
+   130→              <Input
+   131→                value={item.name}
+   132→                onChange={(e) => onUpdate(index, { name: e.target.value })}
+   133→                placeholder="Item name"
+   134→                className="h-9 text-sm"
+   135→              />
+   136→            </div>
+   137→
+   138→            {/* Category */}
+   139→            <div className="lg:col-span-3">
+   140→              <Label className="text-[11px] text-muted-foreground mb-1 block">Category</Label>
+   141→              <Select
+   142→                value={isCommonCategory ? item.category : '__custom__'}
+   143→                onValueChange={(val) => {
+   144→                  if (val !== '__custom__') {
+   145→                    onUpdate(index, { category: val })
+   146→                  }
+   147→                }}
+   148→              >
+   149→                <SelectTrigger className="h-9 text-sm w-full">
+   150→                  <SelectValue placeholder={isCommonCategory ? item.category : 'Custom category'} />
+   151→                </SelectTrigger>
+   152→                <SelectContent>
+   153→                  {COMMON_CATEGORIES.map((cat) => (
+   154→                    <SelectItem key={cat} value={cat}>
+   155→                      {cat}
+   156→                    </SelectItem>
+   157→                  ))}
+   158→                </SelectContent>
+   159→              </Select>
+   160→              {!isCommonCategory && (
+   161→                <Input
+   162→                  value={item.category}
+   163→                  onChange={(e) => onUpdate(index, { category: e.target.value })}
+   164→                  placeholder="Custom category"
+   165→                  className="h-8 text-xs mt-1"
+   166→                />
+   167→              )}
+   168→            </div>
+   169→
+   170→            {/* Description */}
+   171→            <div className="lg:col-span-3">
+   172→              <Label className="text-[11px] text-muted-foreground mb-1 block">Description</Label>
+   173→              <Input
+   174→                value={item.description}
+   175→                onChange={(e) => onUpdate(index, { description: e.target.value })}
+   176→                placeholder="Brief description"
+   177→                className="h-9 text-sm"
+   178→              />
+   179→            </div>
+   180→
+   181→            {/* Price */}
+   182→            <div className="lg:col-span-2">
+   183→              <Label className="text-[11px] text-muted-foreground mb-1 block">Price</Label>
+   184→              <div className="relative">
+   185→                <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-sm text-muted-foreground pointer-events-none">
+   186→                  ₦
+   187→                </span>
+   188→                <Input
+   189→                  type="number"
+   190→                  min={0}
+   191→                  value={item.price || ''}
+   192→                  onChange={(e) =>
+   193→                    onUpdate(index, { price: parseFloat(e.target.value) || 0 })
+   194→                  }
+   195→                  placeholder="0"
+   196→                  className="h-9 text-sm pl-7"
+   197→                />
+   198→              </div>
+   199→            </div>
+   200→          </div>
+   201→
+   202→          {/* Remove Button */}
+   203→          <Button
+   204→            variant="ghost"
+   205→            size="icon"
+   206→            className="h-8 w-8 text-gray-400 hover:text-red-600 shrink-0 mt-5"
+   207→            onClick={() => onRemove(index)}
+   208→          >
+   209→            <Trash2 className="h-4 w-4" />
+   210→          </Button>
+   211→        </div>
+   212→      </CardContent>
+   213→    </Card>
+   214→  )
+   215→}
+   216→
+   217→// ===== Main Component =====
+   218→export function AiScannerPage() {
+   219→  const { currentBusiness } = useAuthStore()
+   220→  const { setCurrentPage } = useAppStore()
+   221→  const {
+   222→    isScanning,
+   223→    detectedItems,
+   224→    setScanning,
+   225→    setDetectedItems,
+   226→    updateDetectedItem,
+   227→    removeDetectedItem,
+   228→    addDetectedItem,
+   229→    resetScan,
+   230→  } = useAiScanStore()
+   231→  const { addCategory, addItem } = useMenuStore()
+   232→
+   233→  const bizId = currentBusiness?.id
+   234→
+   235→  // Local state
+   236→  const [step, setStep] = useState<Step>('upload')
+   237→  const [selectedFile, setSelectedFile] = useState<File | null>(null)
+   238→  const [imagePreview, setImagePreview] = useState<string | null>(null)
+   239→  const [isDragging, setIsDragging] = useState(false)
+   240→  const [saving, setSaving] = useState(false)
+   241→  const fileInputRef = useRef<HTMLInputElement>(null)
+   242→
+   243→  const ACCEPTED_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf']
+   244→  const MAX_SIZE = 10 * 1024 * 1024
+   245→  const ACCEPTED_EXTENSIONS = '.jpg,.jpeg,.png,.webp,.pdf'
+   246→
+   247→  // ===== File Validation =====
+   248→  const validateFile = useCallback((file: File): string | null => {
+   249→    if (!ACCEPTED_TYPES.includes(file.type)) {
+   250→      return 'Unsupported file type. Please upload JPG, PNG, WEBP, or PDF.'
+   251→    }
+   252→    if (file.size > MAX_SIZE) {
+   253→      return 'File is too large. Maximum size is 10MB.'
+   254→    }
+   255→    return null
+   256→  }, [])
+   257→
+   258→  // ===== Handle File Selection =====
+   259→  const handleFile = useCallback(
+   260→    (file: File) => {
+   261→      const error = validateFile(file)
+   262→      if (error) {
+   263→        toast.error(error)
+   264→        return
+   265→      }
+   266→      setSelectedFile(file)
+   267→      if (file.type.startsWith('image/')) {
+   268→        const reader = new FileReader()
+   269→        reader.onload = () => setImagePreview(reader.result as string)
+   270→        reader.readAsDataURL(file)
+   271→      } else {
+   272→        setImagePreview(null)
+   273→      }
+   274→    },
+   275→    [validateFile]
+   276→  )
+   277→
+   278→  const handleDragOver = useCallback((e: React.DragEvent) => {
+   279→    e.preventDefault()
+   280→    e.stopPropagation()
+   281→    setIsDragging(true)
+   282→  }, [])
+   283→
+   284→  const handleDragLeave = useCallback((e: React.DragEvent) => {
+   285→    e.preventDefault()
+   286→    e.stopPropagation()
+   287→    setIsDragging(false)
+   288→  }, [])
+   289→
+   290→  const handleDrop = useCallback(
+   291→    (e: React.DragEvent) => {
+   292→      e.preventDefault()
+   293→      e.stopPropagation()
+   294→      setIsDragging(false)
+   295→      const file = e.dataTransfer.files[0]
+   296→      if (file) handleFile(file)
+   297→    },
+   298→    [handleFile]
+   299→  )
+   300→
+   301→  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+   302→    const file = e.target.files?.[0]
+   303→    if (file) handleFile(file)
+   304→    e.target.value = ''
+   305→  }
+   306→
+   307→  // ===== Scan Handler =====
+   308→  const handleScan = async () => {
+   309→    if (!selectedFile || !bizId) return
+   310→
+   311→    setStep('scanning')
+   312→    setScanning(true)
+   313→
+   314→    try {
+   315→      await aiScanApi.upload(bizId, selectedFile)
+   316→      const base64 = await fileToBase64(selectedFile)
+   317→      const rawItems = await scanWithAI(base64)
+   318→
+   319→      const items: DetectedItem[] = rawItems
+   320→        .map((raw: any) => ({
+   321→          name: String(raw.name || ''),
+   322→          description: String(raw.description || ''),
+   323→          price: typeof raw.price === 'number' ? raw.price : 0,
+   324→          category: String(raw.category || 'Others'),
+   325→        }))
+   326→        .filter((d: DetectedItem) => d.name.trim() !== '')
+   327→
+   328→      if (items.length === 0) {
+   329→        toast.error('No menu items detected. Please try a clearer photo.')
+   330→        setScanning(false)
+   331→        setStep('upload')
+   332→        return
+   333→      }
+   334→
+   335→      setDetectedItems(items)
+   336→      setStep('review')
+   337→      toast.success(`Detected ${items.length} menu items!`)
+   338→    } catch (err) {
+   339→      console.error('AI scan error:', err)
+   340→      toast.error('Failed to scan menu. Please try again with a clearer photo.')
+   341→      setStep('upload')
+   342→    } finally {
+   343→      setScanning(false)
+   344→    }
+   345→  }
+   346→
+   347→  // ===== Save to Menu =====
+   348→  const handleSave = async () => {
+   349→    if (!bizId || detectedItems.length === 0) return
+   350→
+   351→    setSaving(true)
+   352→    try {
+   353→      const grouped = new Map<string, DetectedItem[]>()
+   354→      detectedItems.forEach((item) => {
+   355→        const cat = item.category.trim() || 'Others'
+   356→        if (!grouped.has(cat)) grouped.set(cat, [])
+   357→        grouped.get(cat)!.push(item)
+   358→      })
+   359→
+   360→      let categoriesCreated = 0
+   361→      let itemsCreated = 0
+   362→
+   363→      for (const [catName, items] of grouped) {
+   364→        const cat = await categoryApi.create(bizId, { name: catName })
+   365→        const categoryId = cat.id || cat.category?.id
+   366→        if (!categoryId) continue
+   367→
+   368→        categoriesCreated++
+   369→        addCategory({
+   370→          id: categoryId,
+   371→          name: catName,
+   372→          sortOrder: 0,
+   373→          isHidden: false,
+   374→          items: [],
+   375→          _isNew: true,
+   376→        })
+   377→
+   378→        for (const item of items) {
+   379→          const fd = new FormData()
+   380→          fd.append('name', item.name)
+   381→          fd.append('description', item.description)
+   382→          fd.append('price', String(item.price))
+   383→
+   384→          try {
+   385→            const created = await itemApi.create(bizId, categoryId, fd)
+   386→            const itemId = created.id || created.item?.id
+   387→            if (itemId) {
+   388→              itemsCreated++
+   389→              addItem(categoryId, {
+   390→                id: itemId,
+   391→                name: item.name,
+   392→                description: item.description || null,
+   393→                price: item.price,
+   394→                imageUrl: null,
+   395→                categoryId,
+   396→                sortOrder: 0,
+   397→                isAvailable: true,
+   398→                isHidden: false,
+   399→                _isNew: true,
+   400→              })
+   401→            }
+   402→          } catch (itemErr) {
+   403→            console.error('Failed to create item:', item.name, itemErr)
+   404→          }
+   405→        }
+   406→      }
+   407→
+   408→      toast.success(
+   409→        `Saved to menu! ${categoriesCreated} ${categoriesCreated === 1 ? 'category' : 'categories'} and ${itemsCreated} ${itemsCreated === 1 ? 'item' : 'items'} created.`,
+   410→        { duration: 5000 }
+   411→      )
+   412→
+   413→      resetScan()
+   414→      setSelectedFile(null)
+   415→      setImagePreview(null)
+   416→      setCurrentPage('menu-manager')
+   417→    } catch (err) {
+   418→      console.error('Save error:', err)
+   419→      toast.error((err as Error).message || 'Failed to save items to menu')
+   420→    } finally {
+   421→      setSaving(false)
+   422→    }
+   423→  }
+   424→
+   425→  // ===== Reset to Upload =====
+   426→  const handleRescan = () => {
+   427→    resetScan()
+   428→    setSelectedFile(null)
+   429→    setImagePreview(null)
+   430→    setStep('upload')
+   431→  }
+   432→
+   433→  // ===== Render =====
+   434→  return (
+   435→    <div className="space-y-6">
+   436→      {/* Header */}
+   437→      <div className="flex items-center justify-between">
+   438→        <div>
+   439→          <h2 className="text-xl font-bold text-gray-900">AI Menu Scanner</h2>
+   440→          <p className="text-sm text-muted-foreground mt-0.5">
+   441→            Upload a photo of your menu and let AI do the work
+   442→          </p>
+   443→        </div>
+   444→        {step === 'review' && (
+   445→          <Button variant="outline" size="sm" className="gap-1.5" onClick={handleRescan}>
+   446→            <ArrowLeft className="h-4 w-4" />
+   447→            <span className="hidden sm:inline">Re-scan</span>
+   448→          </Button>
+   449→        )}
+   450→      </div>
+   451→
+   452→      <Separator />
+   453→
+   454→      <AnimatePresence mode="wait">
+   455→        {/* ===== STEP: Upload ===== */}
+   456→        {step === 'upload' && (
+   457→          <motion.div
+   458→            key="upload"
+   459→            initial={{ opacity: 0, y: 12 }}
+   460→            animate={{ opacity: 1, y: 0 }}
+   461→            exit={{ opacity: 0, y: -12 }}
+   462→            transition={{ duration: 0.2 }}
+   463→            className="space-y-6"
+   464→          >
+   465→            {!selectedFile ? (
+   466→              <>
+   467→                {/* Upload Dropzone */}
+   468→                <Card className="border-dashed border-2">
+   469→                  <CardContent className="p-0">
+   470→                    <div
+   471→                      className={`relative flex flex-col items-center justify-center py-16 px-6 rounded-lg transition-all duration-200 cursor-pointer
+   472→                        ${isDragging ? 'bg-[#e94560]/5 border-[#e94560]/30' : 'hover:bg-gray-50'}`}
+   473→                      onDragOver={handleDragOver}
+   474→                      onDragLeave={handleDragLeave}
+   475→                      onDrop={handleDrop}
+   476→                      onClick={() => fileInputRef.current?.click()}
+   477→                    >
+   478→                      <input
+   479→                        ref={fileInputRef}
+   480→                        type="file"
+   481→                        accept={ACCEPTED_EXTENSIONS}
+   482→                        className="hidden"
+   483→                        onChange={handleInputChange}
+   484→                      />
+   485→                      <div className="h-16 w-16 rounded-full bg-gray-100 flex items-center justify-center mb-4">
+   486→                        <CloudUpload
+   487→                          className={`h-8 w-8 transition-colors ${isDragging ? 'text-[#e94560]' : 'text-gray-400'}`}
+   488→                        />
+   489→                      </div>
+   490→                      <h3 className="text-lg font-semibold text-gray-900">Upload Menu Photo</h3>
+   491→                      <p className="text-sm text-muted-foreground mt-1.5 text-center max-w-md">
+   492→                        Our AI will scan your menu and detect items, prices, and categories
+   493→                      </p>
+   494→                      <div className="flex items-center gap-2 mt-4">
+   495→                        {['JPG', 'PNG', 'WEBP', 'PDF'].map((fmt) => (
+   496→                          <span
+   497→                            key={fmt}
+   498→                            className="px-2 py-0.5 text-[10px] font-medium bg-gray-100 text-gray-500 rounded"
+   499→                          >
+   500→                            {fmt}
+   501→                          </span>
+   502→                        ))}
+   503→                      </div>
+   504→                      <p className="text-[11px] text-muted-foreground mt-2">Max file size: 10MB</p>
+   505→                    </div>
+   506→                  </CardContent>
+   507→                </Card>
+   508→
+   509→                {/* Info Cards */}
+   510→                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+   511→                  <Card>
+   512→                    <CardContent className="p-4 flex items-start gap-3">
+   513→                      <div className="h-9 w-9 rounded-lg bg-violet-50 flex items-center justify-center shrink-0">
+   514→                        <Sparkles className="h-4.5 w-4.5 text-violet-600" />
+   515→                      </div>
+   516→                      <div>
+   517→                        <h4 className="text-sm font-medium text-gray-900">AI-Powered</h4>
+   518→                        <p className="text-xs text-muted-foreground mt-0.5">
+   519→                          Advanced vision AI extracts items, prices, and categories automatically.
+   520→                        </p>
+   521→                      </div>
+   522→                    </CardContent>
+   523→                  </Card>
+   524→                  <Card>
+   525→                    <CardContent className="p-4 flex items-start gap-3">
+   526→                      <div className="h-9 w-9 rounded-lg bg-emerald-50 flex items-center justify-center shrink-0">
+   527→                        <ScanLine className="h-4.5 w-4.5 text-emerald-600" />
+   528→                      </div>
+   529→                      <div>
+   530→                        <h4 className="text-sm font-medium text-gray-900">Instant Results</h4>
+   531→                        <p className="text-xs text-muted-foreground mt-0.5">
+   532→                          Get your menu items detected in seconds, not hours.
+   533→                        </p>
+   534→                      </div>
+   535→                    </CardContent>
+   536→                  </Card>
+   537→                  <Card>
+   538→                    <CardContent className="p-4 flex items-start gap-3">
+   539→                      <div className="h-9 w-9 rounded-lg bg-amber-50 flex items-center justify-center shrink-0">
+   540→                        <CheckCircle2 className="h-4.5 w-4.5 text-amber-600" />
+   541→                      </div>
+   542→                      <div>
+   543→                        <h4 className="text-sm font-medium text-gray-900">Review & Edit</h4>
+   544→                        <p className="text-xs text-muted-foreground mt-0.5">
+   545→                          Review detected items, make corrections, then save to your menu.
+   546→                        </p>
+   547→                      </div>
+   548→                    </CardContent>
+   549→                  </Card>
+   550→                </div>
+   551→              </>
+   552→            ) : (
+   553→              <Card>
+   554→                <CardContent className="p-4 space-y-4">
+   555→                  <div className="flex items-center justify-between">
+   556→                    <div className="flex items-center gap-2">
+   557→                      {imagePreview ? (
+   558→                        <ImageIcon className="h-4.5 w-4.5 text-emerald-600" />
+   559→                      ) : (
+   560→                        <Upload className="h-4.5 w-4.5 text-amber-600" />
+   561→                      )}
+   562→                      <span className="text-sm font-medium text-gray-700 truncate">
+   563→                        {selectedFile.name}
+   564→                      </span>
+   565→                      <span className="text-xs text-muted-foreground">
+   566→                        ({(selectedFile.size / 1024).toFixed(1)} KB)
+   567→                      </span>
+   568→                    </div>
+   569→                    <Button
+   570→                      variant="ghost"
+   571→                      size="icon"
+   572→                      className="h-8 w-8 text-gray-400 hover:text-red-600"
+   573→                      onClick={() => {
+   574→                        setSelectedFile(null)
+   575→                        setImagePreview(null)
+   576→                      }}
+   577→                    >
+   578→                      <X className="h-4 w-4" />
+   579→                    </Button>
+   580→                  </div>
+   581→
+   582→                  {imagePreview && (
+   583→                    <div className="relative w-full bg-gray-50 rounded-lg border overflow-hidden max-h-[400px]">
+   584→                      <img
+   585→                        src={imagePreview}
+   586→                        alt="Menu Preview"
+   587→                        className="w-full max-h-[400px] object-contain"
+   588→                      />
+   589→                    </div>
+   590→                  )}
+   591→
+   592→                  <div className="flex flex-col sm:flex-row gap-3">
+   593→                    <Button
+   594→                      variant="outline"
+   595→                      className="flex-1 gap-2"
+   596→                      onClick={() => {
+   597→                        setSelectedFile(null)
+   598→                        setImagePreview(null)
+   599→                      }}
+   600→                    >
+   601→                      <RotateCcw className="h-4 w-4" />
+   602→                      Choose Different File
+   603→                    </Button>
+   604→                    <Button
+   605→                      className="flex-1 gap-2 bg-[#e94560] hover:bg-[#d63851] text-white"
+   606→                      onClick={handleScan}
+   607→                    >
+   608→                      <ScanLine className="h-4 w-4" />
+   609→                      Scan Menu
+   610→                    </Button>
+   611→                  </div>
+   612→                </CardContent>
+   613→              </Card>
+   614→            )}
+   615→          </motion.div>
+   616→        )}
+   617→
+   618→        {/* ===== STEP: Scanning ===== */}
+   619→        {step === 'scanning' && (
+   620→          <motion.div
+   621→            key="scanning"
+   622→            initial={{ opacity: 0, y: 12 }}
+   623→            animate={{ opacity: 1, y: 0 }}
+   624→            exit={{ opacity: 0, y: -12 }}
+   625→            transition={{ duration: 0.2 }}
+   626→            className="space-y-6"
+   627→          >
+   628→            <Card>
+   629→              <CardContent className="p-8 md:p-12">
+   630→                <div className="flex flex-col items-center justify-center text-center space-y-6">
+   631→                  <div className="relative">
+   632→                    <motion.div
+   633→                      className="h-20 w-20 rounded-full border-4 border-gray-200"
+   634→                      style={{ borderTopColor: '#e94560' }}
+   635→                      animate={{ rotate: 360 }}
+   636→                      transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
+   637→                    />
+   638→                    <div className="absolute inset-0 flex items-center justify-center">
+   639→                      <ScanLine className="h-8 w-8 text-[#e94560]" />
+   640→                    </div>
+   641→                  </div>
+   642→
+   643→                  <div className="space-y-2">
+   644→                    <h3 className="text-lg font-semibold text-gray-900">AI is analyzing your menu...</h3>
+   645→                    <p className="text-sm text-muted-foreground max-w-sm">
+   646→                      Our AI vision model is reading your menu, detecting items, prices, and
+   647→                      categories. This usually takes a few seconds.
+   648→                    </p>
+   649→                  </div>
+   650→
+   651→                  <div className="flex flex-wrap justify-center gap-2">
+   652→                    {['Reading image', 'Detecting items', 'Extracting prices', 'Categorizing'].map(
+   653→                      (label, i) => (
+   654→                        <motion.div
+   655→                          key={label}
+   656→                          initial={{ opacity: 0.3 }}
+   657→                          animate={{ opacity: 1 }}
+   658→                          transition={{ delay: i * 0.8, duration: 0.5 }}
+   659→                        >
+   660→                          <Badge variant="secondary" className="text-xs gap-1.5">
+   661→                            <Loader2 className="h-3 w-3 animate-spin" />
+   662→                            {label}
+   663→                          </Badge>
+   664→                        </motion.div>
+   665→                      )
+   666→                    )}
+   667→                  </div>
+   668→                </div>
+   669→              </CardContent>
+   670→            </Card>
+   671→          </motion.div>
+   672→        )}
+   673→
+   674→        {/* ===== STEP: Review Results ===== */}
+   675→        {step === 'review' && (
+   676→          <motion.div
+   677→            key="review"
+   678→            initial={{ opacity: 0, y: 12 }}
+   679→            animate={{ opacity: 1, y: 0 }}
+   680→            exit={{ opacity: 0, y: -12 }}
+   681→            transition={{ duration: 0.2 }}
+   682→            className="space-y-4"
+   683→          >
+   684→            {/* Success Banner */}
+   685→            <div className="flex items-center gap-3 rounded-lg border border-emerald-200 bg-emerald-50 p-4">
+   686→              <CheckCircle2 className="h-5 w-5 text-emerald-600 shrink-0" />
+   687→              <div className="flex-1 min-w-0">
+   688→                <p className="text-sm font-medium text-emerald-800">
+   689→                  AI detected {detectedItems.length} menu{' '}
+   690→                  {detectedItems.length === 1 ? 'item' : 'items'}
+   691→                </p>
+   692→                <p className="text-xs text-emerald-600 mt-0.5">
+   693→                  Review and edit the detected items below before saving to your menu.
+   694→                </p>
+   695→              </div>
+   696→            </div>
+   697→
+   698→            {/* Action Buttons Row */}
+   699→            <div className="flex items-center gap-2 flex-wrap">
+   700→              <Button
+   701→                variant="outline"
+   702→                size="sm"
+   703→                className="gap-1.5"
+   704→                onClick={() =>
+   705→                  addDetectedItem({ name: '', description: '', price: 0, category: 'Others' })
+   706→                }
+   707→              >
+   708→                <Plus className="h-3.5 w-3.5" />
+   709→                Add Item
+   710→              </Button>
+   711→              <Button
+   712→                variant="outline"
+   713→                size="sm"
+   714→                className="gap-1.5 text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700"
+   715→                onClick={() => {
+   716→                  setDetectedItems([])
+   717→                  toast.success('All items cleared')
+   718→                }}
+   719→              >
+   720→                <Trash2 className="h-3.5 w-3.5" />
+   721→                Clear All
+   722→              </Button>
+   723→              <Button
+   724→                variant="outline"
+   725→                size="sm"
+   726→                className="gap-1.5 ml-auto"
+   727→                onClick={handleRescan}
+   728→              >
+   729→                <RotateCcw className="h-3.5 w-3.5" />
+   730→                Re-scan
+   731→              </Button>
+   732→            </div>
+   733→
+   734→            {/* Items List */}
+   735→            {detectedItems.length === 0 ? (
+   736→              <Card>
+   737→                <CardContent className="p-8 text-center">
+   738→                  <AlertCircle className="h-10 w-10 text-gray-300 mx-auto mb-3" />
+   739→                  <p className="text-sm font-medium text-gray-700">No items to save</p>
+   740→                  <p className="text-xs text-muted-foreground mt-1">
+   741→                    Add items manually or re-scan your menu photo.
+   742→                  </p>
+   743→                </CardContent>
+   744→              </Card>
+   745→            ) : (
+   746→              <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-1">
+   747→                {detectedItems.map((item, idx) => (
+   748→                  <motion.div
+   749→                    key={idx}
+   750→                    initial={{ opacity: 0, y: 8 }}
+   751→                    animate={{ opacity: 1, y: 0 }}
+   752→                    transition={{ delay: idx * 0.03, duration: 0.2 }}
+   753→                  >
+   754→                    <DetectedItemRow
+   755→                      item={item}
+   756→                      index={idx}
+   757→                      onUpdate={updateDetectedItem}
+   758→                      onRemove={removeDetectedItem}
+   759→                    />
+   760→                  </motion.div>
+   761→                ))}
+   762→              </div>
+   763→            )}
+   764→
+   765→            {/* Save Button */}
+   766→            {detectedItems.length > 0 && (
+   767→              <div className="sticky bottom-0 bg-white/80 backdrop-blur-md border-t pt-4 pb-1 -mx-4 md:-mx-6 lg:-mx-8 px-4 md:px-6 lg:px-8">
+   768→                <div className="flex items-center justify-between">
+   769→                  <p className="text-sm text-muted-foreground">
+   770→                    {detectedItems.length} {detectedItems.length === 1 ? 'item' : 'items'} ready
+   771→                  </p>
+   772→                  <Button
+   773→                    className="gap-2 bg-[#e94560] hover:bg-[#d63851] text-white"
+   774→                    onClick={handleSave}
+   775→                    disabled={saving}
+   776→                  >
+   777→                    {saving ? (
+   778→                      <Loader2 className="h-4 w-4 animate-spin" />
+   779→                    ) : (
+   780→                      <Save className="h-4 w-4" />
+   781→                    )}
+   782→                    {saving ? 'Saving...' : 'Save to Menu'}
+   783→                  </Button>
+   784→                </div>
+   785→              </div>
+   786→            )}
+   787→          </motion.div>
+   788→        )}
+   789→      </AnimatePresence>
+   790→    </div>
+   791→  )
+   792→}
+   793→
