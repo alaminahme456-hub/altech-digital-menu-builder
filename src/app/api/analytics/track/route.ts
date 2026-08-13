@@ -1,13 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 
-const trackSchema = {
-  businessId: 'string',
-  eventType: 'string',
-  itemId: 'string | null',
-  categoryId: 'string | null',
-};
-
 function getClientIp(request: NextRequest): string {
   const forwarded = request.headers.get('x-forwarded-for');
   if (forwarded) {

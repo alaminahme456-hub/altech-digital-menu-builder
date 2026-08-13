@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { v4 as uuidv4 } from 'uuid';
 import path from 'path';
+import { mkdir, writeFile } from 'fs/promises';
 
 const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
 const ALLOWED_FILE_TYPES = [...ALLOWED_IMAGE_TYPES, 'application/pdf'];
@@ -56,11 +57,13 @@ export async function POST(request: NextRequest) {
     const ext = getExtension(file.type);
     const filename = `${uuidv4()}.${ext}`;
     const subdir = getUploadDir(file.type, type);
-    const filePath = path.join(process.cwd(), 'public', 'uploads', subdir, filename);
+    const uploadDir = path.join(process.cwd(), 'public', 'uploads', subdir);
+    await mkdir(uploadDir, { recursive: true });
+    const filePath = path.join(uploadDir, filename);
     const bytes = await file.arrayBuffer();
     const buffer = Buffer.from(bytes);
 
-    await Bun.write(filePath, buffer);
+    await writeFile(filePath, buffer);
 
     const url = `/uploads/${subdir}/${filename}`;
 

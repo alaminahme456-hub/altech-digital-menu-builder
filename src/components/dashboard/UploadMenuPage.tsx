@@ -245,15 +245,17 @@ export function UploadMenuPage() {
       .get(bizId)
       .then((data) => {
         if (cancelled) return
-        if (data && data.id) {
+        const uploads = data.uploads || []
+        const latest = Array.isArray(uploads) ? uploads[0] : (data.id ? data : null)
+        if (latest && latest.id) {
           setUpload({
-            id: data.id,
-            fileUrl: data.fileUrl,
-            fileType: data.fileType,
-            fileName: data.fileName,
-            fileSize: data.fileSize,
-            status: data.status || 'draft',
-            createdAt: data.createdAt,
+            id: latest.id,
+            fileUrl: latest.fileUrl,
+            fileType: latest.fileType,
+            fileName: latest.fileName || '',
+            fileSize: latest.fileSize || 0,
+            status: latest.status || 'draft',
+            createdAt: latest.createdAt,
           })
         }
       })
@@ -306,10 +308,10 @@ export function UploadMenuPage() {
 
   // ===== Publish/Unpublish Handler =====
   const handlePublish = async (newStatus: string) => {
-    if (!bizId) return
+    if (!bizId || !upload) return
     setPublishing(true)
     try {
-      const data = await menuUploadApi.publish(bizId, newStatus)
+      const data = await menuUploadApi.publish(bizId, upload.id, newStatus)
       setUpload((prev) => (prev ? { ...prev, status: newStatus as MenuUpload['status'] } : null))
       if (newStatus === 'published') {
         toast.success('Menu published! Customers can now view your menu.', {

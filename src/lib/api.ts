@@ -47,11 +47,8 @@ export const businessApi = {
 
   get: (id: string) => authFetch(`/api/businesses/${id}`),
 
-  update: (id: string, data: FormData) =>
-    fetch(`/api/businesses/${id}`, { method: 'PUT', body: data }).then(r => {
-      if (!r.ok) return r.json().then(d => { throw new Error(d.error) })
-      return r.json()
-    }),
+  update: (id: string, data: Record<string, unknown>) =>
+    authFetch(`/api/businesses/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
 
   delete: (id: string) => authFetch(`/api/businesses/${id}`, { method: 'DELETE' }),
 }
@@ -70,7 +67,7 @@ export const categoryApi = {
     authFetch(`/api/businesses/${businessId}/categories/${categoryId}`, { method: 'DELETE' }),
 
   reorder: (businessId: string, categories: { id: string; sortOrder: number }[]) =>
-    authFetch(`/api/businesses/${businessId}/categories/reorder`, { method: 'PUT', body: JSON.stringify({ categories }) }),
+    authFetch(`/api/businesses/${businessId}/categories/reorder`, { method: 'PUT', body: JSON.stringify({ items: categories }) }),
 }
 
 // ===== Menu Items =====
@@ -78,23 +75,17 @@ export const itemApi = {
   list: (businessId: string, categoryId: string) =>
     authFetch(`/api/businesses/${businessId}/categories/${categoryId}/items`),
 
-  create: (businessId: string, categoryId: string, data: FormData) =>
-    fetch(`/api/businesses/${businessId}/categories/${categoryId}/items`, { method: 'POST', body: data }).then(r => {
-      if (!r.ok) return r.json().then(d => { throw new Error(d.error) })
-      return r.json()
-    }),
+  create: (businessId: string, categoryId: string, data: Record<string, unknown>) =>
+    authFetch(`/api/businesses/${businessId}/categories/${categoryId}/items`, { method: 'POST', body: JSON.stringify(data) }),
 
-  update: (businessId: string, categoryId: string, itemId: string, data: FormData) =>
-    fetch(`/api/businesses/${businessId}/categories/${categoryId}/items/${itemId}`, { method: 'PUT', body: data }).then(r => {
-      if (!r.ok) return r.json().then(d => { throw new Error(d.error) })
-      return r.json()
-    }),
+  update: (businessId: string, categoryId: string, itemId: string, data: Record<string, unknown>) =>
+    authFetch(`/api/businesses/${businessId}/categories/${categoryId}/items/${itemId}`, { method: 'PUT', body: JSON.stringify(data) }),
 
   delete: (businessId: string, categoryId: string, itemId: string) =>
     authFetch(`/api/businesses/${businessId}/categories/${categoryId}/items/${itemId}`, { method: 'DELETE' }),
 
-  reorder: (businessId: string, items: { id: string; sortOrder: number }[]) =>
-    authFetch(`/api/businesses/${businessId}/items/reorder`, { method: 'PUT', body: JSON.stringify({ items }) }),
+  reorder: (businessId: string, categoryId: string, items: { id: string; sortOrder: number }[]) =>
+    authFetch(`/api/businesses/${businessId}/items/reorder`, { method: 'PUT', body: JSON.stringify({ categoryId, items }) }),
 }
 
 // ===== Upload =====
@@ -122,8 +113,8 @@ export const menuUploadApi = {
   },
   delete: (businessId: string) =>
     authFetch(`/api/businesses/${businessId}/upload`, { method: 'DELETE' }),
-  publish: (businessId: string, status: string) =>
-    authFetch(`/api/businesses/${businessId}/publish`, { method: 'PUT', body: JSON.stringify({ status }) }),
+  publish: (businessId: string, uploadId: string, status: string) =>
+    authFetch(`/api/businesses/${businessId}/publish`, { method: 'PUT', body: JSON.stringify({ uploadId, status }) }),
 }
 
 // ===== QR Code =====
@@ -155,7 +146,7 @@ export const adminApi = {
   getStats: () => authFetch('/api/admin/stats'),
   getBusinesses: (page?: number) => authFetch(`/api/admin/businesses?page=${page || 1}`),
   updateBusiness: (id: string, data: { status: string }) =>
-    authFetch(`/api/admin/businesses`, { method: 'PUT', body: JSON.stringify({ id, ...data }) }),
+    authFetch(`/api/admin/businesses`, { method: 'PUT', body: JSON.stringify({ businessId: id, ...data }) }),
   getTemplates: () => authFetch('/api/admin/templates'),
   createTemplate: (data: Record<string, unknown>) =>
     authFetch('/api/admin/templates', { method: 'POST', body: JSON.stringify(data) }),

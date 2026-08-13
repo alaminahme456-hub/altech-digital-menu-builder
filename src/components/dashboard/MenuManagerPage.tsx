@@ -712,19 +712,20 @@ export function MenuManagerPage() {
         const uploadRes = await uploadApi.upload(data.imageFile)
         imageUrl = uploadRes.url
       }
-      const fd = new FormData()
-      fd.append('name', data.name)
-      fd.append('description', data.description)
-      fd.append('price', String(data.price))
-      if (imageUrl) fd.append('imageUrl', imageUrl)
+      const itemData: Record<string, unknown> = {
+        name: data.name,
+        description: data.description || undefined,
+        price: data.price,
+      }
+      if (imageUrl) itemData.imageUrl = imageUrl
       // Remove image if cleared
       if (!data.imageFile && !editingItem?.imageUrl) {
-        fd.append('imageUrl', '')
+        itemData.imageUrl = ''
       }
 
       if (editingItem) {
         // Update
-        const updated = await itemApi.update(bizId, selectedCategoryId, editingItem.id, fd)
+        const updated = await itemApi.update(bizId, selectedCategoryId, editingItem.id, itemData)
         updateItem(selectedCategoryId, editingItem.id, {
           name: data.name,
           description: data.description || null,
@@ -735,7 +736,7 @@ export function MenuManagerPage() {
         toast.success('Item updated')
       } else {
         // Create
-        const created = await itemApi.create(bizId, selectedCategoryId, fd)
+        const created = await itemApi.create(bizId, selectedCategoryId, itemData)
         const newItem: MenuItem = {
           id: created.id || created.item?.id || crypto.randomUUID(),
           name: data.name,
@@ -784,12 +785,13 @@ export function MenuManagerPage() {
       const idx = cat.items.findIndex((i) => i.id === item.id)
       const dup = cat.items[idx + 1]
       if (dup && dup._isNew) {
-        const fd = new FormData()
-        fd.append('name', dup.name)
-        fd.append('description', dup.description || '')
-        fd.append('price', String(dup.price))
-        if (dup.imageUrl) fd.append('imageUrl', dup.imageUrl)
-        itemApi.create(bizId, selectedCategoryId, fd).catch(() => {
+        const dupData: Record<string, unknown> = {
+          name: dup.name,
+          description: dup.description || undefined,
+          price: dup.price,
+        }
+        if (dup.imageUrl) dupData.imageUrl = dup.imageUrl
+        itemApi.create(bizId, selectedCategoryId, dupData).catch(() => {
           toast.error('Failed to save duplicated item')
         })
       }
@@ -802,13 +804,14 @@ export function MenuManagerPage() {
     updateItem(selectedCategoryId, item.id, { isAvailable: newVal })
     try {
       if (!bizId) return
-      const fd = new FormData()
-      fd.append('name', item.name)
-      fd.append('description', item.description || '')
-      fd.append('price', String(item.price))
-      fd.append('isAvailable', String(newVal))
-      if (item.imageUrl) fd.append('imageUrl', item.imageUrl)
-      await itemApi.update(bizId, selectedCategoryId, item.id, fd)
+      const toggleData: Record<string, unknown> = {
+        name: item.name,
+        description: item.description || undefined,
+        price: item.price,
+        isAvailable: newVal,
+      }
+      if (item.imageUrl) toggleData.imageUrl = item.imageUrl
+      await itemApi.update(bizId, selectedCategoryId, item.id, toggleData)
     } catch (err) {
       updateItem(selectedCategoryId, item.id, { isAvailable: item.isAvailable })
       toast.error((err as Error).message || 'Failed to update availability')
@@ -830,7 +833,7 @@ export function MenuManagerPage() {
     triggerSaving()
     if (bizId) {
       itemApi
-        .reorder(bizId, withOrder.map((i) => ({ id: i.id, sortOrder: i.sortOrder })))
+        .reorder(bizId, selectedCategoryId, withOrder.map((i) => ({ id: i.id, sortOrder: i.sortOrder })))
         .catch(() => toast.error('Failed to save item order'))
     }
   }

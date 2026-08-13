@@ -5,6 +5,7 @@ import { db } from '@/lib/db';
 import QRCode from 'qrcode';
 import path from 'path';
 import { v4 as uuidv4 } from 'uuid';
+import { mkdir } from 'fs/promises';
 
 async function verifyMembership(userId: string, businessId: string): Promise<boolean> {
   const membership = await db.businessMember.findUnique({
@@ -56,7 +57,9 @@ export async function GET(
 
     // Generate new QR code
     const filename = `qr-${uuidv4()}.png`;
-    const filePath = path.join(process.cwd(), 'public', 'uploads', 'qrcodes', filename);
+    const uploadDir = path.join(process.cwd(), 'public', 'uploads', 'qrcodes');
+    await mkdir(uploadDir, { recursive: true });
+    const filePath = path.join(uploadDir, filename);
 
     await QRCode.toFile(filePath, menuUrl, {
       width: 1024,

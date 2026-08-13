@@ -341,13 +341,14 @@ export function AiScannerPage() {
         })
 
         for (const item of items) {
-          const fd = new FormData()
-          fd.append('name', item.name)
-          fd.append('description', item.description)
-          fd.append('price', String(item.price))
+          const itemData: Record<string, unknown> = {
+            name: item.name,
+            description: item.description || undefined,
+            price: item.price,
+          }
 
           try {
-            const created = await itemApi.create(bizId, categoryId, fd)
+            const created = await itemApi.create(bizId, categoryId, itemData)
             const itemId = created.id || created.item?.id
             if (itemId) {
               itemsCreated++

@@ -101,20 +101,21 @@ export function BusinessSettingsPage() {
 
     setSaving(true)
     try {
-      const formData = new FormData()
-      formData.append('name', name.trim())
-      formData.append('category', category)
-      formData.append('description', description)
-      formData.append('phone', phone)
-      formData.append('whatsapp', whatsapp)
-      formData.append('address', address)
-      formData.append('openingHours', openingHours)
+      const data: Record<string, unknown> = {
+        name: name.trim(),
+        category,
+        description,
+        phone,
+        whatsapp,
+        address,
+        openingHours,
+      }
       // If logo was changed, include new logo URL
       if (logoUrl !== (currentBusiness.logoUrl || null)) {
-        formData.append('logoUrl', logoUrl || '')
+        data.logoUrl = logoUrl || ''
       }
 
-      const updated = await businessApi.update(currentBusiness.id, formData)
+      const updated = await businessApi.update(currentBusiness.id, data)
 
       // Update store with returned data
       const updatedBusiness = { ...currentBusiness, ...updated.business }

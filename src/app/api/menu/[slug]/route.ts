@@ -14,7 +14,7 @@ export async function GET(
       include: {
         designSettings: true,
         menuUploads: {
-          where: { status: { in: ['published', 'unpublished'] } },
+          where: { status: 'published' },
           orderBy: { createdAt: 'desc' },
           take: 1,
         },
@@ -56,7 +56,7 @@ export async function GET(
     }
 
     // Build the response in the expected format
-    const { members, menuUploads, analytics, designSettings, menuCategories, ...businessData } = business;
+    const { menuUploads, designSettings, menuCategories, ...businessData } = business;
 
     const design = designSettings || {
       templateId: null,
